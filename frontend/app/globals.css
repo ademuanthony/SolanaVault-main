@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@plugin "../node_modules/tailwindcss-animate";
+
+:root {
+  --background: #0f172a;
+  /* Slate 900 */
+  --foreground: #f8fafc;
+  /* Slate 50 */
+
+  --primary: #8b5cf6;
+  /* Violet 500 */
+  --primary-foreground: #ffffff;
+
+  --secondary: #1e293b;
+  /* Slate 800 */
+  --secondary-foreground: #f8fafc;
+
+  --accent: #f59e0b;
+  /* Amber 500 */
+  --accent-foreground: #ffffff;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  --muted: #334155;
+  /* Slate 700 */
+  --muted-foreground: #cbd5e1;
+  /* Slate 300 */
+
+  --card: #1e293b;
+  /* Slate 800 */
+  --card-foreground: #f8fafc;
+
+  --border: #334155;
+  /* Slate 700 */
+
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* Wallet Adapter Overrides */
+.wallet-adapter-button-trigger {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  font-family: inherit !important;
+  font-weight: 600 !important;
+  border-radius: var(--radius) !important;
+  height: 40px !important;
+  padding: 0 20px !important;
+}
+
+.wallet-adapter-button-trigger:hover {
+  background-color: #7c3aed !important;
+  /* Violet 600 */
+}

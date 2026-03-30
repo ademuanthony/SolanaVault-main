@@ -1,0 +1,30 @@
+pub mod welcome_bonus_deposit;
+pub mod set_company_wallet;
+pub mod withdraw_company_fees;
+pub mod jupiter_swap;
+pub mod open_dlmm_position;
+pub mod close_dlmm_position;
+pub mod claim_dlmm_fees;
+pub mod simulate_yield;
+pub mod flag_user;
+pub mod unflag_user;
+pub mod admin_register_user;
+pub mod close_user_account;
+pub mod close_dlmm_position_account;
+pub mod update_vault_config;
+
+// Only export the instruction contexts, not the handlers
+pub use welcome_bonus_deposit::WelcomeBonusDeposit;
+pub use set_company_wallet::SetCompanyWallet;
+pub use withdraw_company_fees::WithdrawCompanyFees;
+pub use jupiter_swap::JupiterSwap;
+pub use open_dlmm_position::OpenDlmmPosition;
+pub use close_dlmm_position::CloseDlmmPosition;
+pub use claim_dlmm_fees::ClaimDlmmFees;
+pub use simulate_yield::SimulateYield;
+pub use flag_user::FlagUser;
+pub use unflag_user::UnflagUser;
+pub use admin_register_user::AdminRegisterUser;
+pub use close_user_account::CloseUserAccount;
+pub use close_dlmm_position_account::CloseDlmmPositionAccount;
+pub use update_vault_config::{UpdateVaultConfig, UpdateConfigParams};

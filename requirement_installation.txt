@@ -1,0 +1,49 @@
+sudo apt update
+sudo apt install -y build-essential pkg-config libssl-dev curl git
+
+# NVM
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+source "$HOME/.nvm/nvm.sh"
+
+# Node.js 24.13.0 + Yarn 4.12.0
+nvm install 24.13.0
+nvm use 24.13.0
+nvm alias default 24.13.0
+corepack enable
+corepack prepare yarn@4.12.0 --activate
+
+# Rust 1.92.0
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+rustup install 1.92.0
+rustup default 1.92.0
+
+# Solana CLI 3.1.2
+rm -rf ~/.local/share/solana ~/.cache/solana
+sh -c "$(curl -sSfL https://release.anza.xyz/v3.1.2/install)"
+echo 'export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Anchor CLI 0.32.1
+cargo install --git https://github.com/coral-xyz/anchor --tag v0.32.1 anchor-cli --locked
+
+# Install SBF tools (run inside your project folder)
+cargo build-sbf --force-tools-install
+
+# Initialize package.json if needed (run in project folder)
+yarn init -y
+
+# Runtime deps
+yarn add @coral-xyz/anchor@0.32.1 \
+         @solana/spl-token@0.4.14 \
+         @solana/web3.js@1.98.4
+
+# Dev deps
+yarn add -D chai@5.3.3 \
+            mocha@11.7.2 \
+            ts-mocha@11.1.0 \
+            @types/bn.js@5.1.1 \
+            @types/chai@5.2.2 \
+            @types/mocha@10.0.10 \
+            typescript@5.7.3 \
+            prettier@3.7.4

@@ -1,0 +1,25 @@
+{
+  "name": "SolanaVault",
+  "packageManager": "yarn@4.12.0",
+  "scripts": {
+    "build": "anchor build && node scripts/copy-idl.js"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.32.1",
+    "@meteora-ag/dlmm": "^1.9.3",
+    "@solana/spl-token": "0.4.14",
+    "@solana/web3.js": "1.98.4"
+  },
+  "devDependencies": {
+    "@types/bn.js": "5.1.1",
+    "@types/chai": "5.2.2",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^25.0.9",
+    "chai": "5.3.3",
+    "mocha": "^11.7.5",
+    "prettier": "3.7.4",
+    "ts-mocha": "^11.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
