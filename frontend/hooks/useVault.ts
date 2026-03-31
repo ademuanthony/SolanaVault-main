@@ -9,8 +9,8 @@ import { SolanaVaultClient } from '@/sdk/vault';
 import { buildJupiterCpi } from '@/sdk/jupiter';
 import { buildOpenPositionCpi, buildClosePositionCpi, buildClaimSwapFeeCpi, toDlmmCpiData } from '@/sdk/meteora_dlmm';
 import DLMM, { StrategyType } from '@meteora-ag/dlmm';
-import { SolanaVault } from '@/target/types/solana_vault';
-import IDL from '@/target/types/solana_vault.json';
+import { SolanaVault } from '../target/types/solana_vault';
+import IDL from '../target/types/solana_vault.json';
 
 export const PROGRAM_ID = new PublicKey(
     process.env.NEXT_PUBLIC_PROGRAM_ID || 'CmhBENBj2c2rbAanfUvKGUzPZtffP7Q96hGH4eoAGqZp'

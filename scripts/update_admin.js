@@ -2,12 +2,16 @@ const anchor = require('@coral-xyz/anchor');
 const { PublicKey } = require('@solana/web3.js');
 const fs = require('fs');
 const path = require('path');
+const dotenv = require('dotenv');
+
+// Load .env from project root
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 async function updateAdmin() {
     // 1. CONFIGURATION
-    const NEW_ADMIN_WALLET = '3mCLdsLhyRN3VAqvPteAzk8mJngwdmUbUf8YEGicxT8c'; // REPLACE THIS WITH YOUR NEW ADMIN WALLET
+    const NEW_ADMIN_WALLET = 'H1A4qyRwZQhXL2ohUEw1Rsx1Kgp3WEcKCduMdZNe95xu';
     const PROGRAM_ID = 'CmhBENBj2c2rbAanfUvKGUzPZtffP7Q96hGH4eoAGqZp';
-    const RPC_URL = process.env.ANCHOR_PROVIDER_URL || 'https://api.devnet.solana.com';
+    const RPC_URL = process.env.ANCHOR_PROVIDER_URL || 'https://solana-mainnet.core.chainstack.com/4ed69be823c47a9517d79bd7c873acf6';
 
     // 2. SETUP PROVIDER
     let provider;
