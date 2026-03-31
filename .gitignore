@@ -4,6 +4,10 @@ node_modules/
 
 # Rust
 target/
+# Keep frontend IDL files (needed for Vercel builds)
+!frontend/target/
+!frontend/target/types/
+!frontend/target/types/*
 **/*.rs.bk
 
 # Anchor

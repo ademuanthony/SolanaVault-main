@@ -1,0 +1,3027 @@
+{
+  "address": "CmhBENBj2c2rbAanfUvKGUzPZtffP7Q96hGH4eoAGqZp",
+  "metadata": {
+    "name": "solana_vault",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "admin_register_user",
+      "docs": [
+        "Admin register a user (admin only)"
+      ],
+      "discriminator": [
+        138,
+        120,
+        187,
+        120,
+        156,
+        216,
+        162,
+        48
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "user_wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "user_wallet",
+          "type": "pubkey"
+        },
+        {
+          "name": "referrer",
+          "type": {
+            "option": "pubkey"
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_dlmm_fees",
+      "docs": [
+        "Claim trading fees from a DLMM position into the vault"
+      ],
+      "discriminator": [
+        102,
+        188,
+        67,
+        120,
+        236,
+        199,
+        117,
+        122
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "dlmm_position",
+          "writable": true
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "dlmm_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "claimed_amount",
+          "type": "u64"
+        },
+        {
+          "name": "cpi_data",
+          "type": {
+            "defined": {
+              "name": "DlmmCpiData"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_referral_earnings",
+      "docs": [
+        "Claim accumulated referral earnings"
+      ],
+      "discriminator": [
+        162,
+        50,
+        120,
+        14,
+        177,
+        183,
+        159,
+        153
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_usdc_account",
+          "writable": true
+        },
+        {
+          "name": "vault_usdc_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "global_config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "close_dlmm_position",
+      "docs": [
+        "Close a DLMM position and remove liquidity via Meteora (CPI)"
+      ],
+      "discriminator": [
+        171,
+        247,
+        237,
+        247,
+        208,
+        250,
+        30,
+        228
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "dlmm_position",
+          "writable": true
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "dlmm_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "cpi_data",
+          "type": {
+            "defined": {
+              "name": "DlmmCpiData"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "close_dlmm_position_account",
+      "docs": [
+        "Close a DLMM position account (admin only, must be already closed)"
+      ],
+      "discriminator": [
+        46,
+        119,
+        109,
+        75,
+        187,
+        225,
+        161,
+        103
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "dlmm_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  108,
+                  109,
+                  109,
+                  95,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "dlmm_position.position_index",
+                "account": "DlmmPosition"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "close_user_account",
+      "docs": [
+        "Close an empty user account (user or admin)"
+      ],
+      "discriminator": [
+        236,
+        181,
+        3,
+        71,
+        194,
+        18,
+        151,
+        191
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user_account.wallet",
+                "account": "UserAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rent_receiver",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "deposit",
+      "docs": [
+        "Deposit USDC and receive vault shares"
+      ],
+      "discriminator": [
+        242,
+        35,
+        198,
+        137,
+        82,
+        225,
+        242,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_usdc_account",
+          "writable": true
+        },
+        {
+          "name": "vault_usdc_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "global_config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "share_mint",
+          "writable": true
+        },
+        {
+          "name": "user_share_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "user"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  6,
+                  221,
+                  246,
+                  225,
+                  215,
+                  101,
+                  161,
+                  147,
+                  217,
+                  203,
+                  225,
+                  70,
+                  206,
+                  235,
+                  121,
+                  172,
+                  28,
+                  180,
+                  133,
+                  237,
+                  95,
+                  91,
+                  55,
+                  145,
+                  58,
+                  140,
+                  245,
+                  133,
+                  126,
+                  255,
+                  0,
+                  169
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "share_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "flag_user",
+      "docs": [
+        "Flag a user account (admin only)"
+      ],
+      "discriminator": [
+        185,
+        51,
+        188,
+        148,
+        224,
+        56,
+        167,
+        209
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user_account.wallet",
+                "account": "UserAccount"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize",
+      "docs": [
+        "Initialize the vault with admin and dev wallets"
+      ],
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "vault_usdc_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "global_config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "share_mint",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "InitializeParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "jupiter_swap",
+      "docs": [
+        "Swap USDC ↔ any token via Jupiter"
+      ],
+      "discriminator": [
+        116,
+        207,
+        0,
+        196,
+        252,
+        120,
+        243,
+        18
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "jupiter_program",
+          "docs": [
+            "Should match JUPITER_V6_PROGRAM_ID"
+          ]
+        },
+        {
+          "name": "source_token_account",
+          "docs": [
+            "This should be the token account we're swapping FROM"
+          ],
+          "writable": true
+        },
+        {
+          "name": "destination_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "minimum_amount_out",
+          "type": "u64"
+        },
+        {
+          "name": "swap_data",
+          "type": {
+            "defined": {
+              "name": "JupiterSwapData"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "open_dlmm_position",
+      "docs": [
+        "Open a DLMM position via Meteora (CPI)"
+      ],
+      "discriminator": [
+        37,
+        191,
+        48,
+        198,
+        118,
+        128,
+        208,
+        14
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "dlmm_position",
+          "docs": [
+            "DLMM position metadata owned by this program. The PDA derivation",
+            "is `[\"dlmm_position\", [position_index]]`."
+          ],
+          "writable": true
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "dlmm_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "OpenDlmmPositionParams"
+            }
+          }
+        },
+        {
+          "name": "cpi_data",
+          "type": {
+            "defined": {
+              "name": "DlmmCpiData"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "register",
+      "docs": [
+        "Register a new user with optional referrer"
+      ],
+      "discriminator": [
+        211,
+        124,
+        67,
+        15,
+        211,
+        194,
+        178,
+        240
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "referrer",
+          "type": {
+            "option": "pubkey"
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_company_wallet",
+      "docs": [
+        "Set company wallet"
+      ],
+      "discriminator": [
+        103,
+        25,
+        27,
+        36,
+        174,
+        16,
+        180,
+        55
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_wallet",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_dev_wallet",
+      "docs": [
+        "Set dev wallet (each dev can only set their own)"
+      ],
+      "discriminator": [
+        147,
+        221,
+        84,
+        51,
+        123,
+        126,
+        25,
+        186
+      ],
+      "accounts": [
+        {
+          "name": "dev_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "dev_index",
+          "type": "u8"
+        },
+        {
+          "name": "new_wallet",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_marketer_wallet",
+      "docs": [
+        "Set marketer wallet (marketer can only set their own)"
+      ],
+      "discriminator": [
+        78,
+        210,
+        48,
+        92,
+        237,
+        61,
+        236,
+        32
+      ],
+      "accounts": [
+        {
+          "name": "marketer_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_wallet",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "simulate_yield",
+      "docs": [
+        "Simulate yield (Temporary for Verification)"
+      ],
+      "discriminator": [
+        218,
+        87,
+        103,
+        223,
+        193,
+        51,
+        91,
+        98
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "unflag_user",
+      "docs": [
+        "Unflag a user account (admin only)"
+      ],
+      "discriminator": [
+        135,
+        227,
+        114,
+        4,
+        187,
+        101,
+        147,
+        112
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user_account.wallet",
+                "account": "UserAccount"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_vault_config",
+      "docs": [
+        "Update global configuration (admin only)"
+      ],
+      "discriminator": [
+        122,
+        3,
+        21,
+        222,
+        158,
+        255,
+        238,
+        157
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "UpdateConfigParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "welcome_bonus_deposit",
+      "docs": [
+        "Deposit welcome bonus for a new user"
+      ],
+      "discriminator": [
+        140,
+        78,
+        62,
+        209,
+        193,
+        181,
+        6,
+        58
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user"
+        },
+        {
+          "name": "user_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "share_mint",
+          "writable": true
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "withdraw",
+      "docs": [
+        "Withdraw shares, deduct fees, and distribute"
+      ],
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_usdc_account",
+          "writable": true
+        },
+        {
+          "name": "vault_usdc_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "global_config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_share_account",
+          "writable": true
+        },
+        {
+          "name": "share_mint",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "shares",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_company_fees",
+      "docs": [
+        "Withdraw company fees"
+      ],
+      "discriminator": [
+        155,
+        195,
+        213,
+        213,
+        121,
+        243,
+        176,
+        127
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "company_usdc_account",
+          "writable": true
+        },
+        {
+          "name": "vault_usdc_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "global_config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_dev_fees",
+      "docs": [
+        "Withdraw dev fees"
+      ],
+      "discriminator": [
+        120,
+        194,
+        245,
+        142,
+        246,
+        177,
+        195,
+        9
+      ],
+      "accounts": [
+        {
+          "name": "dev_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "dev_usdc_account",
+          "writable": true
+        },
+        {
+          "name": "vault_usdc_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "global_config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "dev_index",
+          "type": "u8"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_marketer_fees",
+      "docs": [
+        "Withdraw marketer fees"
+      ],
+      "discriminator": [
+        33,
+        185,
+        74,
+        247,
+        128,
+        4,
+        33,
+        63
+      ],
+      "accounts": [
+        {
+          "name": "marketer_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "marketer_usdc_account",
+          "writable": true
+        },
+        {
+          "name": "vault_usdc_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "global_config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "DlmmPosition",
+      "discriminator": [
+        21,
+        99,
+        160,
+        10,
+        119,
+        253,
+        141,
+        87
+      ]
+    },
+    {
+      "name": "GlobalConfig",
+      "discriminator": [
+        149,
+        8,
+        156,
+        202,
+        160,
+        252,
+        176,
+        217
+      ]
+    },
+    {
+      "name": "UserAccount",
+      "discriminator": [
+        211,
+        33,
+        136,
+        16,
+        186,
+        110,
+        242,
+        127
+      ]
+    },
+    {
+      "name": "VaultState",
+      "discriminator": [
+        228,
+        196,
+        82,
+        165,
+        98,
+        210,
+        235,
+        152
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "UnauthorizedAdmin",
+      "msg": "Unauthorized: Only admin can perform this action"
+    },
+    {
+      "code": 6001,
+      "name": "UnauthorizedDev",
+      "msg": "Unauthorized: Only dev can perform this action"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidDevIndex",
+      "msg": "Invalid dev index"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidDevWalletUpdate",
+      "msg": "Dev can only update their own wallet"
+    },
+    {
+      "code": 6004,
+      "name": "InsufficientFunds",
+      "msg": "Insufficient funds"
+    },
+    {
+      "code": 6005,
+      "name": "MathOverflow",
+      "msg": "Math overflow"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidReferralChain",
+      "msg": "Invalid referral chain"
+    },
+    {
+      "code": 6007,
+      "name": "UserAccountNotFound",
+      "msg": "User account not found"
+    },
+    {
+      "code": 6008,
+      "name": "VaultNotInitialized",
+      "msg": "Vault not initialized"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidShareAmount",
+      "msg": "Invalid share amount"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidDepositAmount",
+      "msg": "Invalid deposit amount"
+    },
+    {
+      "code": 6011,
+      "name": "UserAlreadyRegistered",
+      "msg": "User already registered"
+    },
+    {
+      "code": 6012,
+      "name": "CannotReferSelf",
+      "msg": "Cannot refer yourself"
+    },
+    {
+      "code": 6013,
+      "name": "ReferrerNotFound",
+      "msg": "Referrer not found"
+    },
+    {
+      "code": 6014,
+      "name": "InvalidRemainingAccounts",
+      "msg": "Invalid remaining accounts passed"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidOperation",
+      "msg": "Invalid operation"
+    },
+    {
+      "code": 6016,
+      "name": "UserFlagged",
+      "msg": "User account is flagged and cannot perform this operation"
+    },
+    {
+      "code": 6017,
+      "name": "InvalidFeeDistribution",
+      "msg": "Invalid fee distribution: total must be 100%"
+    },
+    {
+      "code": 6018,
+      "name": "InvalidReferralDistribution",
+      "msg": "Invalid referral distribution: total must be 100%"
+    }
+  ],
+  "types": [
+    {
+      "name": "DlmmAccountMeta",
+      "docs": [
+        "Compact representation of DLMM AccountMeta for CPI."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pubkey",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_signer",
+            "type": "bool"
+          },
+          {
+            "name": "is_writable",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DlmmCpiData",
+      "docs": [
+        "Full DLMM CPI payload (accounts + raw instruction data).",
+        "",
+        "Built off-chain using Meteora's DLMM SDK and passed in so we can",
+        "forward the CPI on-chain."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "accounts",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "DlmmAccountMeta"
+                }
+              }
+            }
+          },
+          {
+            "name": "data",
+            "type": "bytes"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DlmmMode",
+      "docs": [
+        "DLMM position mode"
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Spot"
+          },
+          {
+            "name": "BidAsk"
+          },
+          {
+            "name": "Curve"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DlmmPosition",
+      "docs": [
+        "DLMM Position Account - tracks a single DLMM position"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "position_index",
+            "type": "u8"
+          },
+          {
+            "name": "dlmm_pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "position_nft",
+            "type": "pubkey"
+          },
+          {
+            "name": "bin_array_lower",
+            "type": "pubkey"
+          },
+          {
+            "name": "bin_array_upper",
+            "type": "pubkey"
+          },
+          {
+            "name": "mode",
+            "type": {
+              "defined": {
+                "name": "DlmmMode"
+              }
+            }
+          },
+          {
+            "name": "bin_id_lower",
+            "type": "i32"
+          },
+          {
+            "name": "bin_id_upper",
+            "type": "i32"
+          },
+          {
+            "name": "token_x_amount",
+            "type": "u64"
+          },
+          {
+            "name": "token_y_amount",
+            "type": "u64"
+          },
+          {
+            "name": "ratio",
+            "type": "u8"
+          },
+          {
+            "name": "one_sided",
+            "type": "bool"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlobalConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "company_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev1_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev1_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev2_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev2_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev3_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev3_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "marketer1_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "marketer1_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "company_fees",
+            "type": "u64"
+          },
+          {
+            "name": "dev1_fees",
+            "type": "u64"
+          },
+          {
+            "name": "dev2_fees",
+            "type": "u64"
+          },
+          {
+            "name": "dev3_fees",
+            "type": "u64"
+          },
+          {
+            "name": "marketer1_fees",
+            "type": "u64"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault_usdc_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "share_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "tier1_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "tier2_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "tier1_fee",
+            "type": "u8"
+          },
+          {
+            "name": "tier2_fee",
+            "type": "u8"
+          },
+          {
+            "name": "tier3_fee",
+            "type": "u8"
+          },
+          {
+            "name": "company_share",
+            "type": "u8"
+          },
+          {
+            "name": "dev1_share",
+            "type": "u8"
+          },
+          {
+            "name": "dev2_share",
+            "type": "u8"
+          },
+          {
+            "name": "dev3_share",
+            "type": "u8"
+          },
+          {
+            "name": "marketer1_share",
+            "type": "u8"
+          },
+          {
+            "name": "referral_pool_share",
+            "type": "u8"
+          },
+          {
+            "name": "referral_l1_share",
+            "type": "u8"
+          },
+          {
+            "name": "referral_l2_share",
+            "type": "u8"
+          },
+          {
+            "name": "referral_l3_share",
+            "type": "u8"
+          },
+          {
+            "name": "referral_l4_share",
+            "type": "u8"
+          },
+          {
+            "name": "referral_l5_share",
+            "type": "u8"
+          },
+          {
+            "name": "welcome_bonus_user",
+            "type": "u64"
+          },
+          {
+            "name": "welcome_bonus_dev",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitializeParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "company_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev1_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev1_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev2_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev2_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev3_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev3_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "marketer1_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "marketer1_authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "JupiterSwapData",
+      "docs": [
+        "Full Jupiter swap payload (accounts + raw instruction data).",
+        "",
+        "The client is responsible for:",
+        "- Calling Jupiter's quote + swap-instructions APIs",
+        "- Converting the returned `Instruction` accounts + data into this struct",
+        "- Ensuring that all `pubkey`s here correspond to the accounts passed to",
+        "this instruction (explicit accounts + `remaining_accounts`)"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "accounts",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "SwapAccountMeta"
+                }
+              }
+            }
+          },
+          {
+            "name": "data",
+            "type": "bytes"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OpenDlmmPositionParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "position_index",
+            "type": "u8"
+          },
+          {
+            "name": "dlmm_pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "position_nft",
+            "type": "pubkey"
+          },
+          {
+            "name": "bin_array_lower",
+            "type": "pubkey"
+          },
+          {
+            "name": "bin_array_upper",
+            "type": "pubkey"
+          },
+          {
+            "name": "mode",
+            "type": {
+              "defined": {
+                "name": "DlmmMode"
+              }
+            }
+          },
+          {
+            "name": "bin_id_lower",
+            "type": "i32"
+          },
+          {
+            "name": "bin_id_upper",
+            "type": "i32"
+          },
+          {
+            "name": "token_x_amount",
+            "type": "u64"
+          },
+          {
+            "name": "token_y_amount",
+            "type": "u64"
+          },
+          {
+            "name": "ratio",
+            "type": "u8"
+          },
+          {
+            "name": "one_sided",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SwapAccountMeta",
+      "docs": [
+        "Compact representation of Jupiter's required AccountMeta for CPI.",
+        "",
+        "This is constructed off-chain from Jupiter's `/swap-instructions` response",
+        "and passed into the program so we can rebuild the exact `Instruction`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pubkey",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_signer",
+            "type": "bool"
+          },
+          {
+            "name": "is_writable",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UpdateConfigParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "tier1_threshold",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "tier2_threshold",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "tier1_fee",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "tier2_fee",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "tier3_fee",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "company_share",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "dev1_share",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "dev2_share",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "dev3_share",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "marketer1_share",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "referral_pool_share",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "referral_l1_share",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "referral_l2_share",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "referral_l3_share",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "referral_l4_share",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "referral_l5_share",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "welcome_bonus_user",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "welcome_bonus_dev",
+            "type": {
+              "option": "u64"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "referrer",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          },
+          {
+            "name": "entry_price",
+            "type": "u64"
+          },
+          {
+            "name": "unclaimed_referral_earnings",
+            "type": "u64"
+          },
+          {
+            "name": "total_referral_earnings",
+            "type": "u64"
+          },
+          {
+            "name": "is_flagged",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "total_tvl",
+            "type": "u64"
+          },
+          {
+            "name": "total_shares",
+            "type": "u64"
+          },
+          {
+            "name": "positions_count",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}
