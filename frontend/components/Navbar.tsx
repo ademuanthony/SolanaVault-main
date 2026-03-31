@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import clsx from 'clsx';
 import { LayoutDashboard, Users, Shield, LineChart, ChevronRight } from 'lucide-react';
+import { CaifuLogo } from './CaifuLogo';
 import { useEffect, useState } from 'react';
 
 export function Navbar() {
@@ -28,8 +29,8 @@ export function Navbar() {
             <div className="container mx-auto flex h-20 items-center justify-between px-6">
                 <div className="flex items-center gap-12">
                     <Link href="/" className="group flex items-center gap-3">
-                        <div className="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(var(--primary-rgb),0.4)] group-hover:scale-110 transition-transform">
-                            <Shield className="h-6 w-6 text-primary-foreground" />
+                        <div className="group-hover:scale-110 transition-transform">
+                            <CaifuLogo size={40} />
                         </div>
                         <span className="font-black italic text-2xl tracking-tighter uppercase">Caifu</span>
                     </Link>

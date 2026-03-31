@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Shield, Twitter, Github, Globe } from 'lucide-react';
+import { Twitter, Github, Globe } from 'lucide-react';
+import { CaifuLogo } from './CaifuLogo';
 
 export function Footer() {
     return (
@@ -10,7 +11,7 @@ export function Footer() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
                     <div className="space-y-4">
                         <div className="flex items-center gap-2 font-bold text-xl text-primary">
-                            <Shield className="h-6 w-6" />
+                            <CaifuLogo size={28} />
                             <span>Caifu</span>
                         </div>
                         <p className="text-sm text-muted-foreground">
