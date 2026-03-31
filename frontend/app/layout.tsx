@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Solana Yield Vault",
-  description: "Earn yield on your USDC with Meteora DLMM strategies",
+  title: "Caifu — Solana Yield Vault",
+  description: "Earn yield on your USDC with automated Meteora DLMM strategies. Secure, transparent, and built for growth.",
 };
 
 export default function RootLayout({

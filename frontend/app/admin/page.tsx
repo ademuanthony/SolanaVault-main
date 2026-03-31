@@ -73,11 +73,11 @@ export default function AdminDashboard() {
                         </div>
                         <div className="relative z-10 space-y-4">
                             <p className="text-sm font-medium leading-relaxed max-w-xs">
-                                Deploying the Solana Vault smart contract state. This process derives all Program Derived Addresses (PDAs) and sets global fee constants.
+                                Deploying the Caifu smart contract state. This process derives all Program Derived Addresses (PDAs) and sets global fee constants.
                             </p>
                             <div className="flex items-center gap-3">
                                 <span className="bg-black text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">Network</span>
-                                <span className="text-black font-black uppercase tracking-widest text-[10px]">Devnet v1.02</span>
+                                <span className="text-black font-black uppercase tracking-widest text-[10px]">Mainnet v1.0</span>
                             </div>
                         </div>
                     </div>

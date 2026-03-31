@@ -80,7 +80,7 @@ export default function ReferralPage() {
                     Vault Not Initialized
                 </h1>
                 <p className="text-muted-foreground mb-8 max-w-md">
-                    The Solana Vault program has not been initialized on this network ({connection.rpcEndpoint}).
+                    The Caifu protocol has not been initialized on this network ({connection.rpcEndpoint}).
                     Please ensure the program is deployed and the `initialize` instruction has been run.
                 </p>
                 <button

@@ -49,7 +49,7 @@ export default function Dashboard() {
                     <Shield className="w-16 h-16 text-amber-500 mx-auto mb-8 animate-pulse" />
                     <h1 className="text-4xl font-black italic tracking-tighter uppercase mb-4 text-amber-500">Protocol Offline</h1>
                     <p className="text-muted-foreground mb-10 text-sm font-medium leading-relaxed uppercase tracking-widest opacity-60">
-                        The Solana Vault protocol is not active on this cluster ({connection.rpcEndpoint}).
+                        The Caifu protocol is not active on this cluster ({connection.rpcEndpoint}).
                         The administrator must initialize the genesis state.
                     </p>
                     <button

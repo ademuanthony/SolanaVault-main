@@ -1,5 +1,5 @@
 {
-  "name": "SolanaVault",
+  "name": "caifu",
   "packageManager": "yarn@4.12.0",
   "scripts": {
     "build": "anchor build && node scripts/copy-idl.js"

@@ -31,7 +31,7 @@ export function Navbar() {
                         <div className="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(var(--primary-rgb),0.4)] group-hover:scale-110 transition-transform">
                             <Shield className="h-6 w-6 text-primary-foreground" />
                         </div>
-                        <span className="font-black italic text-2xl tracking-tighter uppercase">VAULT</span>
+                        <span className="font-black italic text-2xl tracking-tighter uppercase">Caifu</span>
                     </Link>
 
                     <div className="hidden lg:flex items-center gap-2">

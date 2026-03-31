@@ -68,7 +68,7 @@ export default function LeaderboardPage() {
                     Vault Leaderboard
                 </h1>
                 <p className="text-muted-foreground max-w-2xl mx-auto">
-                    Recognizing the top contributors and community builders in the Solana Vault ecosystem.
+                    Recognizing the top contributors and community builders in the Caifu ecosystem.
                 </p>
             </div>
 

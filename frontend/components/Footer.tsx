@@ -11,7 +11,7 @@ export function Footer() {
                     <div className="space-y-4">
                         <div className="flex items-center gap-2 font-bold text-xl text-primary">
                             <Shield className="h-6 w-6" />
-                            <span>SolanaVault</span>
+                            <span>Caifu</span>
                         </div>
                         <p className="text-sm text-muted-foreground">
                             Professional grade yield optimization on Solana.
@@ -48,7 +48,7 @@ export function Footer() {
                 </div>
 
                 <div className="border-t border-border pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
-                    <p>© 2026 Solana Yield Vault. All rights reserved.</p>
+                    <p>© 2026 Caifu. All rights reserved.</p>
                     <div className="flex gap-6">
                         <a href="#" className="hover:text-primary">Privacy Policy</a>
                         <a href="#" className="hover:text-primary">Terms of Service</a>
