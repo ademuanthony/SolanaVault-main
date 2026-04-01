@@ -47,7 +47,7 @@ export interface BuildJupiterCpiResult {
  * Build JupiterSwapData + ordered AccountMetas for CPI from off-chain.
  *
  * This helper:
- * - Calls Jupiter's v6 quote API
+ * - Calls Jupiter's v1 quote API
  * - Calls /swap-instructions to get a single swap instruction
  * - Converts that into:
  *   - swapData: to pass into `program.methods.jupiterSwap(...)`
@@ -58,7 +58,7 @@ export async function buildJupiterCpi(
 ): Promise<BuildJupiterCpiResult> {
   const { inputMint, outputMint, amount, slippageBps, userPublicKey } = params;
 
-  const quoteUrl = new URL("https://quote-api.jup.ag/v6/quote");
+  const quoteUrl = new URL("https://api.jup.ag/swap/v1/quote");
   quoteUrl.searchParams.set("inputMint", inputMint.toBase58());
   quoteUrl.searchParams.set("outputMint", outputMint.toBase58());
   quoteUrl.searchParams.set("amount", amount.toString());
@@ -70,7 +70,7 @@ export async function buildJupiterCpi(
   }
   const quoteResponse = await quoteRes.json();
 
-  const swapRes = await fetch("https://quote-api.jup.ag/v6/swap-instructions", {
+  const swapRes = await fetch("https://api.jup.ag/swap/v1/swap-instructions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -11,9 +11,9 @@ export function SwapTab() {
     const [fromToken, setFromToken] = useState('USDC');
     const [toToken, setToToken] = useState('SOL');
 
-    // Devnet Mints
+    // Mainnet Mints
     const TOKENS = {
-        'USDC': '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+        'USDC': 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
         'SOL': 'So11111111111111111111111111111111111111112',
     };
 
@@ -106,7 +106,7 @@ export function SwapTab() {
 
                 <div className="bg-amber-500/5 border border-amber-500/10 p-3 lg:p-4 rounded-xl lg:rounded-2xl text-[9px] lg:text-[11px] text-amber-500/80 flex gap-2 lg:gap-3 leading-relaxed">
                     <Shield className="w-4 h-4 lg:w-5 lg:h-5 shrink-0 mt-0.5 opacity-60" />
-                    <span>Devnet liquidity may be low. Swap small amounts to ensure the simulation succeeds on-chain.</span>
+                    <span>Swap small amounts first to ensure the simulation succeeds on-chain.</span>
                 </div>
 
                 <button
