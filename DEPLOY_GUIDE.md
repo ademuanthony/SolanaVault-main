@@ -40,7 +40,7 @@ Follow the prompts:
 When prompted to modify settings, you MUST add the environment variables defined in `.env.example`:
 
 - `NEXT_PUBLIC_SOLANA_RPC_URL`: (Your RPC URL)
-- `NEXT_PUBLIC_PROGRAM_ID`: `CmhBENBj2c2rbAanfUvKGUzPZtffP7Q96hGH4eoAGqZp`
+- `NEXT_PUBLIC_PROGRAM_ID`: `8ssaGrsiVrJqaUzCEhTfVUj6K1ZpXcdwx9xD9gxZWWvC`
 - `NEXT_PUBLIC_ADMIN_WALLET_ADDRESS`: `3mCLdsLhyRN3VAqvPteAzk8mJngwdmUbUf8YEGicxT8c`
 
 Alternatively, you can add them after the first deployment in the [Vercel Dashboard](https://vercel.com/dashboard).
