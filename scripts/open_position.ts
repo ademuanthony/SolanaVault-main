@@ -21,7 +21,7 @@ import * as path from "path";
 // CONFIGURATION — Edit these values before running
 // ============================================================
 
-const PROGRAM_ID = new PublicKey("B3SnRh6Snmk7PvvRHu2o3wDQRpFf1DBMaR9zQpjL4LPx");
+const PROGRAM_ID = new PublicKey("EA6Sz3Q7CuoyJSzmDD3QUf5KXRrqHZ4QbxkmyrZfUNBi");
 const DLMM_PROGRAM_ID = new PublicKey("LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo");
 
 // Pool and position parameters

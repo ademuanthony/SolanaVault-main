@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 async function checkConfig() {
-    const PROGRAM_ID = 'B3SnRh6Snmk7PvvRHu2o3wDQRpFf1DBMaR9zQpjL4LPx';
+    const PROGRAM_ID = 'EA6Sz3Q7CuoyJSzmDD3QUf5KXRrqHZ4QbxkmyrZfUNBi';
     const RPC_URL = process.env.ANCHOR_PROVIDER_URL || 'https://solana-mainnet.core.chainstack.com/4ed69be823c47a9517d79bd7c873acf6';
 
     const connection = new anchor.web3.Connection(RPC_URL, 'processed');

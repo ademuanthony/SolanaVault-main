@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/solana_vault.json`.
  */
 export type SolanaVault = {
-  "address": "B3SnRh6Snmk7PvvRHu2o3wDQRpFf1DBMaR9zQpjL4LPx",
+  "address": "EA6Sz3Q7CuoyJSzmDD3QUf5KXRrqHZ4QbxkmyrZfUNBi",
   "metadata": {
     "name": "solanaVault",
     "version": "0.1.0",
