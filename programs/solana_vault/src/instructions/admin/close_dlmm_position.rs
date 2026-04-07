@@ -72,9 +72,12 @@ pub fn handler<'info>(
     };
 
     // Map metas -> AccountInfos using explicit + remaining accounts.
+    // Include admin and global_config so their signer status is available for CPI.
     let mut all_infos: Vec<AccountInfo<'info>> =
-        Vec::with_capacity(1 + ctx.remaining_accounts.len());
+        Vec::with_capacity(3 + ctx.remaining_accounts.len());
     all_infos.push(ctx.accounts.dlmm_program.to_account_info());
+    all_infos.push(ctx.accounts.admin.to_account_info());
+    all_infos.push(ctx.accounts.global_config.to_account_info());
     all_infos.extend_from_slice(ctx.remaining_accounts);
 
     let mut account_infos: Vec<AccountInfo<'info>> =

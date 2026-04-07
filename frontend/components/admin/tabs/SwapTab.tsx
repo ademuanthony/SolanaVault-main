@@ -1,30 +1,94 @@
 'use client';
 
 import { useState } from 'react';
-import { RefreshCw, Shield, Loader2, ArrowDown } from 'lucide-react';
+import { RefreshCw, Shield, Loader2, ArrowDown, ChevronDown } from 'lucide-react';
 import { toast } from "sonner";
 import { useVault } from '@/hooks/useVault';
+
+const PRESET_TOKENS: { symbol: string; mint: string }[] = [
+    { symbol: 'USDC', mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' },
+    { symbol: 'SOL', mint: 'So11111111111111111111111111111111111111112' },
+    { symbol: 'USDT', mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' },
+    { symbol: 'mSOL', mint: 'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So' },
+    { symbol: 'JitoSOL', mint: 'J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn' },
+    { symbol: 'JupSOL', mint: 'jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v' },
+    { symbol: 'bSOL', mint: 'bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1' },
+    { symbol: 'WETH', mint: '7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs' },
+    { symbol: 'WBTC', mint: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh' },
+    { symbol: 'BONK', mint: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263' },
+    { symbol: 'JUP', mint: 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN' },
+    { symbol: 'WIF', mint: 'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm' },
+    { symbol: 'RENDER', mint: 'rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof' },
+];
+
+function TokenSelector({ value, onChange, label }: {
+    value: string;
+    onChange: (mint: string) => void;
+    label: string;
+}) {
+    const [showCustom, setShowCustom] = useState(false);
+    const [customMint, setCustomMint] = useState('');
+
+    const preset = PRESET_TOKENS.find(t => t.mint === value);
+    const displayLabel = preset?.symbol || (value ? value.slice(0, 4) + '..' + value.slice(-2) : 'Select');
+
+    return (
+        <div className="relative shrink-0">
+            <div className="flex flex-col gap-1">
+                <select
+                    value={showCustom ? '__custom__' : value}
+                    onChange={(e) => {
+                        if (e.target.value === '__custom__') {
+                            setShowCustom(true);
+                        } else {
+                            setShowCustom(false);
+                            setCustomMint('');
+                            onChange(e.target.value);
+                        }
+                    }}
+                    className="bg-background/80 rounded-lg lg:rounded-xl px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm font-bold border border-border/50 outline-none"
+                >
+                    {PRESET_TOKENS.map(t => (
+                        <option key={t.mint} value={t.mint}>{t.symbol}</option>
+                    ))}
+                    <option value="__custom__">Custom Mint...</option>
+                </select>
+                {showCustom && (
+                    <input
+                        type="text"
+                        value={customMint}
+                        onChange={(e) => {
+                            setCustomMint(e.target.value);
+                            if (e.target.value.length >= 32) {
+                                onChange(e.target.value);
+                            }
+                        }}
+                        placeholder="Paste mint address"
+                        className="bg-background/80 rounded-lg px-2 py-1 text-[10px] font-mono border border-border/50 outline-none w-36 focus:ring-1 focus:ring-primary/50"
+                    />
+                )}
+            </div>
+        </div>
+    );
+}
 
 export function SwapTab() {
     const { jupiter_swap: jupiterSwap, loading } = useVault();
     const [fromAmount, setFromAmount] = useState('');
-    const [fromToken, setFromToken] = useState('USDC');
-    const [toToken, setToToken] = useState('SOL');
+    const [fromMint, setFromMint] = useState('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+    const [toMint, setToMint] = useState('So11111111111111111111111111111111111111112');
 
-    // Mainnet Mints
-    const TOKENS = {
-        'USDC': 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-        'SOL': 'So11111111111111111111111111111111111111112',
-    };
+    const fromSymbol = PRESET_TOKENS.find(t => t.mint === fromMint)?.symbol || fromMint.slice(0, 6) + '..';
+    const toSymbol = PRESET_TOKENS.find(t => t.mint === toMint)?.symbol || toMint.slice(0, 6) + '..';
 
     const handleSwap = async () => {
         if (!fromAmount || Number(fromAmount) <= 0) return;
+        if (!fromMint || !toMint || fromMint === toMint) {
+            toast.error('Select two different tokens');
+            return;
+        }
         try {
-            await jupiterSwap(
-                TOKENS[fromToken as keyof typeof TOKENS],
-                TOKENS[toToken as keyof typeof TOKENS],
-                Number(fromAmount)
-            );
+            await jupiterSwap(fromMint, toMint, Number(fromAmount));
             toast.success('Swap executed successfully!');
             setFromAmount('');
         } catch (e: any) {
@@ -34,9 +98,9 @@ export function SwapTab() {
     };
 
     const switchTokens = () => {
-        const temp = fromToken;
-        setFromToken(toToken);
-        setToToken(temp);
+        const temp = fromMint;
+        setFromMint(toMint);
+        setToMint(temp);
     };
 
     return (
@@ -46,14 +110,13 @@ export function SwapTab() {
 
                 <div className="space-y-1">
                     <h3 className="text-lg lg:text-xl font-bold tracking-tight">Admin Swap</h3>
-                    <p className="text-[10px] lg:text-sm text-muted-foreground">Manage vault liquidity via Jupiter DEX.</p>
+                    <p className="text-[10px] lg:text-sm text-muted-foreground">Manage vault liquidity via Jupiter DEX. Supports any SPL token.</p>
                 </div>
 
                 <div className="space-y-3 lg:space-y-4 relative">
                     <div className="bg-secondary/40 rounded-xl lg:rounded-2xl p-3 lg:p-4 border border-border/50 transition-all focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/40">
                         <div className="flex justify-between items-center mb-1.5 lg:mb-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                            <label>From</label>
-                            <span className="opacity-50">Vault: --</span>
+                            <label>From ({fromSymbol})</label>
                         </div>
                         <div className="flex gap-3 lg:gap-4">
                             <input
@@ -63,13 +126,7 @@ export function SwapTab() {
                                 onChange={(e) => setFromAmount(e.target.value)}
                                 className="flex-1 bg-transparent text-lg lg:text-xl font-semibold outline-none placeholder:text-muted-foreground/30 min-w-0"
                             />
-                            <select
-                                value={fromToken}
-                                onChange={(e) => setFromToken(e.target.value)}
-                                className="bg-background/80 rounded-lg lg:rounded-xl px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm font-bold border border-border/50 outline-none shrink-0"
-                            >
-                                {Object.keys(TOKENS).map(t => <option key={t}>{t}</option>)}
-                            </select>
+                            <TokenSelector value={fromMint} onChange={setFromMint} label="From" />
                         </div>
                     </div>
 
@@ -84,7 +141,7 @@ export function SwapTab() {
 
                     <div className="bg-secondary/40 rounded-xl lg:rounded-2xl p-3 lg:p-4 border border-border/50">
                         <div className="flex justify-between items-center mb-1.5 lg:mb-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                            <label>To</label>
+                            <label>To ({toSymbol})</label>
                         </div>
                         <div className="flex gap-3 lg:gap-4">
                             <input
@@ -93,13 +150,7 @@ export function SwapTab() {
                                 placeholder="Live Quote"
                                 className="flex-1 bg-transparent text-lg lg:text-xl font-semibold outline-none text-muted-foreground/30 min-w-0"
                             />
-                            <select
-                                value={toToken}
-                                onChange={(e) => setToToken(e.target.value)}
-                                className="bg-background/80 rounded-lg lg:rounded-xl px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm font-bold border border-border/50 outline-none shrink-0"
-                            >
-                                {Object.keys(TOKENS).map(t => <option key={t}>{t}</option>)}
-                            </select>
+                            <TokenSelector value={toMint} onChange={setToMint} label="To" />
                         </div>
                     </div>
                 </div>
@@ -111,11 +162,11 @@ export function SwapTab() {
 
                 <button
                     onClick={handleSwap}
-                    disabled={loading || !fromAmount}
+                    disabled={loading || !fromAmount || !fromMint || !toMint || fromMint === toMint}
                     className="w-full bg-primary text-primary-foreground py-4 rounded-2xl font-black uppercase tracking-widest hover:opacity-90 transition-all shadow-[0_8px_32px_rgba(var(--primary-rgb),0.3)] disabled:opacity-50 flex items-center justify-center gap-3 relative overflow-hidden active:scale-95"
                 >
                     {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
-                    {loading ? 'Processing...' : 'Execute Swap'}
+                    {loading ? 'Processing...' : `Swap ${fromSymbol} → ${toSymbol}`}
                 </button>
             </div>
         </div>

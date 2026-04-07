@@ -10,13 +10,14 @@ export interface SwapAccountMeta {
   isWritable: boolean;
 }
 
+/** Matches on-chain Borsh layout — use camelCase for Anchor JS client serialization */
 export interface JupiterSwapData {
   accounts: {
     pubkey: PublicKey;
     isSigner: boolean;
     isWritable: boolean;
   }[];
-  data: number[]; // raw instruction data bytes
+  data: Buffer;
 }
 
 export interface BuildJupiterCpiParams {
@@ -32,6 +33,12 @@ export interface BuildJupiterCpiParams {
   userPublicKey: PublicKey;
 }
 
+export interface ParsedInstruction {
+  programId: PublicKey;
+  accounts: SwapAccountMeta[];
+  data: Buffer;
+}
+
 export interface BuildJupiterCpiResult {
   swapData: JupiterSwapData;
   /**
@@ -41,6 +48,10 @@ export interface BuildJupiterCpiResult {
    * - the remaining ones via `.remainingAccounts(...)`
    */
   allMetas: SwapAccountMeta[];
+  /** Setup instructions (e.g. ATA creation) that must run before the swap */
+  setupInstructions: ParsedInstruction[];
+  /** Optional cleanup instruction (e.g. close wSOL account) */
+  cleanupInstruction: ParsedInstruction | null;
 }
 
 /**
@@ -63,8 +74,18 @@ export async function buildJupiterCpi(
   quoteUrl.searchParams.set("outputMint", outputMint.toBase58());
   quoteUrl.searchParams.set("amount", amount.toString());
   quoteUrl.searchParams.set("slippageBps", slippageBps.toString());
+  // Force direct routes to keep account count low enough for CPI (avoids tx size limit)
+  quoteUrl.searchParams.set("onlyDirectRoutes", "true");
 
-  const quoteRes = await fetch(quoteUrl.toString());
+  const apiKey = typeof process !== "undefined" && process.env?.NEXT_PUBLIC_JUPITER_API_KEY
+    ? process.env.NEXT_PUBLIC_JUPITER_API_KEY
+    : undefined;
+
+  const authHeaders: Record<string, string> = apiKey
+    ? { "x-api-key": apiKey }
+    : {};
+
+  const quoteRes = await fetch(quoteUrl.toString(), { headers: authHeaders });
   if (!quoteRes.ok) {
     throw new Error(`Jupiter quote failed: ${quoteRes.status} ${quoteRes.statusText}`);
   }
@@ -74,11 +95,13 @@ export async function buildJupiterCpi(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders,
     },
     body: JSON.stringify({
       quoteResponse,
       userPublicKey: userPublicKey.toBase58(),
       wrapUnwrapSOL: false,
+      useSharedAccounts: true, // Use SharedAccountsRoute — required for CPI
     }),
   });
 
@@ -102,15 +125,43 @@ export async function buildJupiterCpi(
     isWritable: acc.isWritable,
   }));
 
-  const dataBytes = Array.from(
-    Buffer.from(swapIx.data, "base64") // Jupiter encodes instruction data as base64
-  );
+  const dataBuffer = Buffer.from(swapIx.data, "base64"); // Jupiter encodes instruction data as base64
 
+  // Use camelCase keys — Anchor JS client converts IDL snake_case to camelCase
   const swapData: JupiterSwapData = {
-    accounts: allMetas,
-    data: dataBytes,
+    accounts: allMetas.map(m => ({
+      pubkey: m.pubkey,
+      isSigner: m.isSigner,
+      isWritable: m.isWritable,
+    })),
+    data: dataBuffer,
   };
 
-  return { swapData, allMetas };
+  // Parse setup instructions
+  const setupInstructions: ParsedInstruction[] = (swapJson.setupInstructions || []).map((ix: any) => ({
+    programId: new PublicKey(ix.programId),
+    accounts: ix.accounts.map((acc: any) => ({
+      pubkey: new PublicKey(acc.pubkey),
+      isSigner: acc.isSigner,
+      isWritable: acc.isWritable,
+    })),
+    data: Buffer.from(ix.data, "base64"),
+  }));
+
+  // Parse cleanup instruction
+  const rawCleanup = swapJson.cleanupInstruction;
+  const cleanupInstruction: ParsedInstruction | null = rawCleanup
+    ? {
+        programId: new PublicKey(rawCleanup.programId),
+        accounts: rawCleanup.accounts.map((acc: any) => ({
+          pubkey: new PublicKey(acc.pubkey),
+          isSigner: acc.isSigner,
+          isWritable: acc.isWritable,
+        })),
+        data: Buffer.from(rawCleanup.data, "base64"),
+      }
+    : null;
+
+  return { swapData, allMetas, setupInstructions, cleanupInstruction };
 }
 

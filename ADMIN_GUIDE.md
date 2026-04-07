@@ -37,7 +37,7 @@ Accumulated fees for the Company, Developers, and Marketer can be viewed and wit
 
 ## Technical Details
 
-- **Program ID**: `8ssaGrsiVrJqaUzCEhTfVUj6K1ZpXcdwx9xD9gxZWWvC`
+- **Program ID**: `B3SnRh6Snmk7PvvRHu2o3wDQRpFf1DBMaR9zQpjL4LPx`
 - **Network**: Solana Devnet (currently configured)
 - **Jupiter Program**: `JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4`
 

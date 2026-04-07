@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("8ssaGrsiVrJqaUzCEhTfVUj6K1ZpXcdwx9xD9gxZWWvC");
+declare_id!("B3SnRh6Snmk7PvvRHu2o3wDQRpFf1DBMaR9zQpjL4LPx");
 
 pub mod constants;
 pub mod errors;
@@ -21,6 +21,7 @@ use instructions::{
         set_company_wallet::*,
         withdraw_company_fees::*,
         jupiter_swap::*,
+        jupiter_swap_v2::*,
         open_dlmm_position::*,
         close_dlmm_position::*,
         claim_dlmm_fees::*,
@@ -30,6 +31,8 @@ use instructions::{
         admin_register_user::*,
         close_user_account::*,
         close_dlmm_position_account::*,
+        close_pda_token_account::*,
+        update_tvl::*,
         update_vault_config::*,
     },
     // Dev instructions
@@ -103,6 +106,17 @@ pub mod solana_vault {
         swap_data: JupiterSwapData,
     ) -> Result<()> {
         instructions::admin::jupiter_swap::handler(ctx, amount, minimum_amount_out, swap_data)
+    }
+
+    /// Swap via Jupiter V2 — uses remaining_accounts for CPI metas.
+    /// Automatically transfers tokens between vault PDAs and standard ATAs
+    /// that Jupiter expects.
+    pub fn jupiter_swap_v2<'info>(
+        ctx: Context<'_, '_, '_, 'info, JupiterSwapV2<'info>>,
+        swap_data: Vec<u8>,
+        swap_amount: u64,
+    ) -> Result<()> {
+        instructions::admin::jupiter_swap_v2::handler(ctx, swap_data, swap_amount)
     }
 
     /// Open a DLMM position via Meteora (CPI)
@@ -203,6 +217,16 @@ pub mod solana_vault {
     /// Close a DLMM position account (admin only, must be already closed)
     pub fn close_dlmm_position_account(ctx: Context<CloseDlmmPositionAccount>) -> Result<()> {
         instructions::admin::close_dlmm_position_account::handler(ctx)
+    }
+
+    /// Close a PDA-owned token account and return rent to admin (must have zero balance)
+    pub fn close_pda_token_account(ctx: Context<ClosePdaTokenAccount>) -> Result<()> {
+        instructions::admin::close_pda_token_account::handler(ctx)
+    }
+
+    /// Update TVL to reflect actual vault value (admin only, max 20% decrease per call)
+    pub fn update_tvl(ctx: Context<UpdateTvl>, new_tvl: u64) -> Result<()> {
+        instructions::admin::update_tvl::handler(ctx, new_tvl)
     }
 
     /// Update global configuration (admin only)

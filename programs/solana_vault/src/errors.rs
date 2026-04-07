@@ -60,4 +60,10 @@ pub enum VaultError {
 
     #[msg("Invalid referral distribution: total must be 100%")]
     InvalidReferralDistribution,
+
+    #[msg("Token account must have zero balance before closing")]
+    TokenAccountNotEmpty,
+
+    #[msg("TVL decrease exceeds maximum allowed per update (20%)")]
+    TvlDecreaseTooLarge,
 }

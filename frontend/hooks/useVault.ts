@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor';
-import { PublicKey, SystemProgram, Keypair, Transaction } from '@solana/web3.js';
+import { PublicKey, SystemProgram, Keypair, Transaction, TransactionInstruction, TransactionMessage, VersionedTransaction, AddressLookupTableProgram, ComputeBudgetProgram } from '@solana/web3.js';
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, MINT_SIZE, createInitializeMintInstruction, getMinimumBalanceForRentExemptMint, getAccount } from '@solana/spl-token';
 import { SolanaVaultClient } from '@/sdk/vault';
 import { buildJupiterCpi } from '@/sdk/jupiter';
@@ -13,7 +13,7 @@ import { SolanaVault } from '../target/types/solana_vault';
 import IDL from '../target/types/solana_vault.json';
 
 export const PROGRAM_ID = new PublicKey(
-    process.env.NEXT_PUBLIC_PROGRAM_ID || '8ssaGrsiVrJqaUzCEhTfVUj6K1ZpXcdwx9xD9gxZWWvC'
+    process.env.NEXT_PUBLIC_PROGRAM_ID || 'B3SnRh6Snmk7PvvRHu2o3wDQRpFf1DBMaR9zQpjL4LPx'
 );
 const JUPITER_PROGRAM_ID = new PublicKey('JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4');
 
@@ -594,6 +594,91 @@ export function useVault() {
         }
     };
 
+    /**
+     * Calculate the real vault TVL from on-chain data:
+     * vault USDC balance + all Meteora position values
+     */
+    const calculateRealTvl = async (): Promise<number> => {
+        if (!program) throw new Error('Not initialized');
+        const { globalConfigPda, vaultStatePda, vaultUsdcPda } = getPDAs();
+
+        // 1. Vault USDC balance
+        let vaultUsdc = 0;
+        try {
+            const bal = await connection.getTokenAccountBalance(vaultUsdcPda);
+            vaultUsdc = Number(bal.value.amount);
+        } catch { /* empty vault */ }
+
+        // 2. Sum all Meteora position values
+        let positionsValue = 0;
+        if (activePositions.length > 0) {
+            const DLMM = (await import('@meteora-ag/dlmm')).default;
+            for (const pos of activePositions) {
+                try {
+                    const acct = pos.account;
+                    const pool = await DLMM.create(connection, acct.dlmmPool);
+                    const posData = await pool.getPosition(acct.positionNft);
+                    if (!posData?.positionData) continue;
+
+                    const mintX = pool.lbPair.tokenXMint;
+                    const mintY = pool.lbPair.tokenYMint;
+                    const xDec = mintX.toBase58() === 'So11111111111111111111111111111111111111112' ? 9 : 6;
+                    const yDec = mintY.toBase58() === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ? 6 : 9;
+
+                    const posX = Number(posData.positionData.totalXAmount?.toString() || '0') / Math.pow(10, xDec);
+                    const posY = Number(posData.positionData.totalYAmount?.toString() || '0') / Math.pow(10, yDec);
+                    const feeX = Number(posData.positionData.feeX?.toString() || '0') / Math.pow(10, xDec);
+                    const feeY = Number(posData.positionData.feeY?.toString() || '0') / Math.pow(10, yDec);
+
+                    const activeBin = await pool.getActiveBin();
+                    const rawPrice = parseFloat(activeBin.price);
+                    const priceXinY = rawPrice * Math.pow(10, xDec - yDec);
+
+                    const valueUsdc = (posX + feeX) * priceXinY + posY + feeY;
+                    positionsValue += Math.floor(valueUsdc * 1e6); // raw USDC
+                } catch (e) {
+                    console.warn('Could not value position:', e);
+                }
+            }
+        }
+
+        return vaultUsdc + positionsValue;
+    };
+
+    /**
+     * Sync on-chain TVL with actual vault value.
+     * Calls the update_tvl instruction with the real calculated value.
+     */
+    const syncTvl = async () => {
+        if (!program || !publicKey) throw new Error('Not initialized');
+        setLoading(true);
+        try {
+            const { globalConfigPda, vaultStatePda } = getPDAs();
+            const realTvl = await calculateRealTvl();
+            const currentTvl = Number(vaultState?.totalTvl || 0);
+
+            console.log(`TVL sync: current=${currentTvl}, real=${realTvl}, delta=${realTvl - currentTvl}`);
+
+            const tx = await (program.methods as any)
+                .updateTvl(new BN(realTvl))
+                .accounts({
+                    admin: publicKey,
+                    globalConfig: globalConfigPda,
+                    vaultState: vaultStatePda,
+                })
+                .rpc();
+
+            console.log('TVL sync success:', tx);
+            await fetchState();
+            return { tx, oldTvl: currentTvl, newTvl: realTvl };
+        } catch (error) {
+            console.error('TVL sync failed:', error);
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const jupiterSwap = async (
         inputMint: string,
         outputMint: string,
@@ -673,7 +758,7 @@ export function useVault() {
                 return "devnet_simulated_swap_signature_" + Date.now();
             }
 
-            const { swapData, allMetas } = await buildJupiterCpi({
+            const { swapData, allMetas, addressLookupTableAccounts } = await buildJupiterCpi({
                 connection,
                 inputMint: inputMintPubkey,
                 outputMint: outputMintPubkey,
@@ -682,20 +767,55 @@ export function useVault() {
                 userPublicKey: globalConfigPda, // The vault PDA is the "user" in Jupiter's eyes
             });
 
-            const tx = await client.jupiterSwap({
+            // Compute standard ATAs that Jupiter expects for the PDA
+            const jupiterSourceAta = await getAssociatedTokenAddress(inputMintPubkey, globalConfigPda, true);
+            const jupiterDestinationAta = await getAssociatedTokenAddress(outputMintPubkey, globalConfigPda, true);
+
+            // Build pre-swap setup: ensure both standard ATAs exist (admin pays, PDA owns)
+            const preInstructions: TransactionInstruction[] = [];
+
+            const createAtaIx = (ata: PublicKey, mint: PublicKey) =>
+                new TransactionInstruction({
+                    programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+                    keys: [
+                        { pubkey: publicKey, isSigner: true, isWritable: true },
+                        { pubkey: ata, isSigner: false, isWritable: true },
+                        { pubkey: globalConfigPda, isSigner: false, isWritable: false },
+                        { pubkey: mint, isSigner: false, isWritable: false },
+                        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+                        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+                    ],
+                    data: Buffer.alloc(0),
+                });
+
+            // Create source ATA if it doesn't exist
+            try { await getAccount(connection, jupiterSourceAta); } catch {
+                preInstructions.push(createAtaIx(jupiterSourceAta, inputMintPubkey));
+            }
+
+            // Create destination ATA if it doesn't exist
+            try { await getAccount(connection, jupiterDestinationAta); } catch {
+                preInstructions.push(createAtaIx(jupiterDestinationAta, outputMintPubkey));
+            }
+
+            // Use V2: the on-chain handler transfers tokens between vault PDAs and standard ATAs
+            const tx = await client.jupiterSwapV2({
                 admin: publicKey,
                 globalConfig: globalConfigPda,
                 jupiterProgram: JUPITER_PROGRAM_ID,
                 sourceTokenAccount,
                 destinationTokenAccount,
-                amount: new BN(amountParam.toString()),
-                minimumAmountOut: new BN(0), // Handled by Jupiter's slippage checks usually, or pass from quote
-                swapData,
+                jupiterSourceAta,
+                jupiterDestinationAta,
+                swapData: swapData.data,
+                swapAmount: new BN(amountParam.toString()),
                 remainingAccounts: allMetas.map(m => ({
                     pubkey: m.pubkey,
-                    isSigner: m.isSigner,
+                    isSigner: false,
                     isWritable: m.isWritable
-                }))
+                })),
+                addressLookupTableAccounts,
+                preInstructions,
             });
 
             console.log('Jupiter Swap success:', tx);
@@ -718,118 +838,70 @@ export function useVault() {
         amountY: number,
         strategyType: number // UI: 0: Spot, 1: Curve, 2: BidAsk
     ) => {
-        if (!client || !publicKey || !globalConfig) throw new Error('Not initialized');
+        if (!program || !publicKey || !signTransaction) throw new Error('Not initialized');
         setLoading(true);
         try {
-            console.log('=== DLMM Position Creation Started ===');
-            console.log('Input Parameters:', {
-                poolAddress,
-                minBinId,
-                maxBinId,
-                amountX,
-                amountY,
-                strategyType,
-                strategyName: strategyType === 0 ? 'Spot' : strategyType === 1 ? 'Curve' : 'BidAsk'
-            });
-
             const { globalConfigPda, vaultStatePda } = getPDAs();
             const poolPubkey = new PublicKey(poolAddress);
+            const DLMM_PROGRAM_ID = new PublicKey('LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo');
+            const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+            const NATIVE_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 
-            console.log('PDAs:', {
-                globalConfig: globalConfigPda.toBase58(),
-                vaultState: vaultStatePda.toBase58(),
-                admin: publicKey.toBase58()
-            });
-
-            // Fetch Vault State for index using a loop to find first free index
-            const currentVaultState = await program!.account.vaultState.fetch(vaultStatePda);
-            let index = currentVaultState.positionsCount;
-            let dlmmPositionPda: PublicKey;
-            let dlmmPositionSeedIndex: Buffer;
-
-            // Look for the next available index
+            // Find next free position index
+            const currentVaultState = await program.account.vaultState.fetch(vaultStatePda);
+            let index = currentVaultState.positionsCount as number;
+            let dlmmPositionPda!: PublicKey;
             while (true) {
-                dlmmPositionSeedIndex = Buffer.from([index]);
                 [dlmmPositionPda] = PublicKey.findProgramAddressSync(
-                    [Buffer.from('dlmm_position'), dlmmPositionSeedIndex],
-                    PROGRAM_ID
+                    [Buffer.from('dlmm_position'), Buffer.from([index])], PROGRAM_ID
                 );
-
-                const info = await connection.getAccountInfo(dlmmPositionPda);
-                if (!info) {
-                    console.log(`Found free index: ${index}`);
-                    break;
-                }
-                console.log(`Index ${index} already in use, skipping...`);
+                if (!(await connection.getAccountInfo(dlmmPositionPda))) break;
                 index++;
-                if (index > 255) throw new Error("No free positions available (max 255)");
+                if (index > 255) throw new Error("No free positions (max 255)");
             }
 
-            console.log('Position Index & PDA:', {
-                index,
-                indexType: typeof index,
-                dlmmPositionPda: dlmmPositionPda.toBase58()
-            });
-
-            // Convert amounts
-            const totalX = BigInt(Math.floor(amountX * 1e6));
-            const totalY = BigInt(Math.floor(amountY * 1e6));
-            const totalXBN = new BN(totalX.toString());
-            const totalYBN = new BN(totalY.toString());
-
-            console.log('Amount Conversions:', {
-                amountX,
-                amountY,
-                totalX: totalX.toString(),
-                totalY: totalY.toString(),
-                totalXBN: totalXBN.toString(),
-                totalYBN: totalYBN.toString()
-            });
-
-            // Generate Position NFT Mint
+            // Generate position keypair
             const positionMintKeypair = Keypair.generate();
-            console.log('Position NFT Mint:', positionMintKeypair.publicKey.toBase58());
 
-            // Map UI Strategy to Rust Enum
-            // UI: 0=Spot, 1=Curve, 2=BidAsk
-            // Rust: 0=Spot, 1=BidAsk, 2=Curve
-            let dlmmMode = 0;
-            if (strategyType === 1) dlmmMode = 2; // Curve
-            else if (strategyType === 2) dlmmMode = 1; // BidAsk
+            // Get Meteora SDK instructions
+            const dlmmPool = await (await import('@meteora-ag/dlmm')).default.create(connection, poolPubkey);
+            const mintX = dlmmPool.lbPair.tokenXMint;
+            const mintY = dlmmPool.lbPair.tokenYMint;
+            const xDecimals = mintX.toBase58() === NATIVE_MINT.toBase58() ? 9 : 6;
+            const yDecimals = mintY.toBase58() === USDC_MINT.toBase58() ? 6 : 9;
+            const totalXRaw = BigInt(Math.floor(amountX * Math.pow(10, xDecimals)));
+            const totalYRaw = BigInt(Math.floor(amountY * Math.pow(10, yDecimals)));
 
-            console.log('Strategy Mapping:', {
-                uiStrategyType: strategyType,
-                rustDlmmMode: dlmmMode,
-                rustModeName: dlmmMode === 0 ? 'spot' : dlmmMode === 1 ? 'bidAsk' : 'curve'
-            });
-
-            // Build CPI data
-            console.log('Building CPI data with Meteora SDK...');
-            const cpiData = await buildOpenPositionCpi({
-                connection,
-                pool: poolPubkey,
+            const meteoraTx = await dlmmPool.initializePositionAndAddLiquidityByStrategy({
+                positionPubKey: positionMintKeypair.publicKey,
                 user: globalConfigPda,
-                payer: publicKey, // Admin pays for rent
-                positionPubkey: positionMintKeypair.publicKey,
-                totalXAmount: totalX,
-                totalYAmount: totalY,
-                minBinId,
-                maxBinId,
-                strategyType: strategyType as StrategyType,
-            });
+                totalXAmount: new BN(totalXRaw.toString()),
+                totalYAmount: new BN(totalYRaw.toString()),
+                strategy: { minBinId, maxBinId, strategyType },
+            } as any);
 
-            console.log('CPI Data from Meteora SDK:', {
-                accountsCount: cpiData.accounts.length,
-                dataLength: cpiData.data.length,
-                dataHex: cpiData.data.toString('hex').substring(0, 100) + '...',
-                signersCount: cpiData.signers?.length || 0,
-                accounts: cpiData.accounts.map((a, i) => ({
-                    index: i,
-                    pubkey: a.pubkey.toBase58(),
-                    isSigner: a.isSigner,
-                    isWritable: a.isWritable
-                }))
-            });
+            const ixs = meteoraTx.instructions ?? (meteoraTx as any).message?.instructions;
+            const dlmmIxs = (ixs || []).filter((ix: any) => ix.programId.equals(DLMM_PROGRAM_ID));
+            if (dlmmIxs.length === 0) throw new Error("No DLMM instructions from SDK");
+
+            const initIx = dlmmIxs[0] as TransactionInstruction;
+            const addLiqIx = dlmmIxs.length > 1 ? (dlmmIxs[1] as TransactionInstruction) : null;
+
+            // Build initializePosition CPI data — replace payer (account[0]) with admin
+            const initCpiData = {
+                accounts: initIx.keys.map((k: any, i: number) => {
+                    if (i === 0 && k.pubkey.equals(globalConfigPda)) {
+                        return { pubkey: publicKey, isSigner: true, isWritable: true };
+                    }
+                    return { pubkey: k.pubkey, isSigner: k.isSigner, isWritable: k.isWritable };
+                }),
+                data: Buffer.from(initIx.data),
+            };
+
+            // Map UI strategy to Rust enum
+            let dlmmMode = 0;
+            if (strategyType === 1) dlmmMode = 2;
+            else if (strategyType === 2) dlmmMode = 1;
 
             const params = {
                 positionIndex: index,
@@ -840,83 +912,148 @@ export function useVault() {
                 mode: { [dlmmMode === 0 ? 'spot' : dlmmMode === 1 ? 'bidAsk' : 'curve']: {} },
                 binIdLower: minBinId,
                 binIdUpper: maxBinId,
-                tokenXAmount: totalXBN,
-                tokenYAmount: totalYBN,
+                tokenXAmount: new BN(totalXRaw.toString()),
+                tokenYAmount: new BN(totalYRaw.toString()),
                 ratio: 50,
-                oneSided: false,
+                oneSided: Boolean(amountX === 0 || amountY === 0),
             };
 
-            console.log('OpenDlmmPositionParams:', {
-                positionIndex: params.positionIndex,
-                dlmmPool: params.dlmmPool.toBase58(),
-                positionNft: params.positionNft.toBase58(),
-                binArrayLower: params.binArrayLower.toBase58(),
-                binArrayUpper: params.binArrayUpper.toBase58(),
-                mode: params.mode,
-                binIdLower: params.binIdLower,
-                binIdUpper: params.binIdUpper,
-                tokenXAmount: params.tokenXAmount.toString(),
-                tokenYAmount: params.tokenYAmount.toString(),
-                ratio: params.ratio,
-                oneSided: params.oneSided
+            const initRemaining = initIx.keys.map((k: any) => {
+                const key = k.pubkey.toBase58();
+                let isSigner = false;
+                if (key === positionMintKeypair.publicKey.toBase58()) isSigner = true;
+                if (key === publicKey.toBase58()) isSigner = true;
+                return { pubkey: k.pubkey, isSigner, isWritable: k.isWritable };
             });
 
-            // Replace placeholder fee payer
-            const PLACEHOLDER_KEY = '3KMyzDtmtw3xxZ4ijMSDp54qiXmr1oMpYNJFxXaXYSzY';
-            const fixedAccounts = cpiData.accounts.map(a => {
-                if (a.pubkey.toString() === PLACEHOLDER_KEY) {
-                    console.log('Replacing placeholder key with admin wallet:', publicKey.toBase58());
-                    return { ...a, pubkey: publicKey };
+            // ── TX1: Initialize position ──
+            console.log('TX1: Building initializePosition...');
+            const ix1 = await (program.methods as any)
+                .openDlmmPosition(params, initCpiData)
+                .accounts({
+                    admin: publicKey,
+                    globalConfig: globalConfigPda,
+                    dlmmPosition: dlmmPositionPda,
+                    vaultState: vaultStatePda,
+                    dlmmProgram: DLMM_PROGRAM_ID,
+                    systemProgram: SystemProgram.programId,
+                })
+                .remainingAccounts(initRemaining)
+                .instruction();
+
+            const bh1 = await connection.getLatestBlockhash();
+            const msg1 = new TransactionMessage({
+                payerKey: publicKey,
+                recentBlockhash: bh1.blockhash,
+                instructions: [ix1],
+            }).compileToV0Message();
+            let tx1 = new VersionedTransaction(msg1);
+            tx1.sign([positionMintKeypair]);
+            tx1 = await signTransaction(tx1) as any;
+
+            const txId1 = await connection.sendRawTransaction(tx1.serialize());
+            console.log('TX1 sent:', txId1);
+            await connection.confirmTransaction({ signature: txId1, blockhash: bh1.blockhash, lastValidBlockHeight: bh1.lastValidBlockHeight });
+            console.log('TX1 confirmed: position initialized!');
+
+            // ── TX2: Add liquidity (if SDK returned the instruction) ──
+            if (addLiqIx) {
+                console.log('TX2: Building addLiquidity...');
+
+                // Ensure ATAs exist for globalConfigPda for BOTH pool tokens
+                const { getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } = await import('@solana/spl-token');
+                const poolMints = [mintX, mintY];
+                const ataIxs: TransactionInstruction[] = [];
+                for (const mint of poolMints) {
+                    const ata = await getAssociatedTokenAddress(mint, globalConfigPda, true);
+                    if (!(await connection.getAccountInfo(ata))) {
+                        console.log(`Creating ATA for mint ${mint.toBase58().slice(0, 8)}...`);
+                        ataIxs.push(createAssociatedTokenAccountIdempotentInstruction(publicKey, ata, globalConfigPda, mint));
+                    }
                 }
-                return a;
-            });
+                if (ataIxs.length > 0) {
+                    const ataBh = await connection.getLatestBlockhash();
+                    const ataMsg = new TransactionMessage({
+                        payerKey: publicKey, recentBlockhash: ataBh.blockhash, instructions: ataIxs,
+                    }).compileToV0Message();
+                    let ataTx = new VersionedTransaction(ataMsg);
+                    ataTx = await signTransaction(ataTx) as any;
+                    const ataTxId = await connection.sendRawTransaction(ataTx.serialize());
+                    await connection.confirmTransaction({ signature: ataTxId, blockhash: ataBh.blockhash, lastValidBlockHeight: ataBh.lastValidBlockHeight });
+                    console.log('ATAs created');
+                }
 
-            const fixedCpiData = {
-                ...cpiData,
-                accounts: fixedAccounts
-            };
+                // Swap USDC ATA → vault USDC PDA in CPI data and remaining accounts
+                const globalConfigUsdcAta = await getAssociatedTokenAddress(USDC_MINT, globalConfigPda, true);
+                const [vaultUsdcAccount] = PublicKey.findProgramAddressSync(
+                    [Buffer.from("vault_usdc"), globalConfigPda.toBuffer()], PROGRAM_ID
+                );
 
-            console.log('Fixed CPI Data:', {
-                accountsCount: fixedCpiData.accounts.length,
-                dataLength: fixedCpiData.data.length
-            });
+                const addLiqCpiAccounts = addLiqIx.keys.map((k: any) => {
+                    let pubkey = k.pubkey;
+                    if (pubkey.equals(globalConfigUsdcAta)) pubkey = vaultUsdcAccount;
+                    return { pubkey, isSigner: k.isSigner, isWritable: k.isWritable };
+                });
 
-            const signers = [positionMintKeypair, ...(cpiData.signers || [])];
-            console.log('Signers:', {
-                count: signers.length,
-                signers: signers.map(s => s.publicKey.toBase58())
-            });
+                const addLiqRemaining = addLiqIx.keys.map((k: any) => {
+                    let pubkey = k.pubkey;
+                    if (pubkey.equals(globalConfigUsdcAta)) pubkey = vaultUsdcAccount;
+                    return { pubkey, isSigner: false, isWritable: k.isWritable };
+                });
 
-            console.log('Calling client.openDlmmPosition...');
-            const tx = await client.openDlmmPosition({
-                admin: publicKey,
-                globalConfig: globalConfigPda,
-                dlmmPosition: dlmmPositionPda,
-                vaultState: vaultStatePda,
-                dlmmProgram: new PublicKey('LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo'),
-                params,
-                cpiData: fixedCpiData,
-                remainingAccounts: fixedCpiData.accounts.map(m => ({
-                    pubkey: m.pubkey,
-                    isSigner: m.isSigner,
-                    isWritable: m.isWritable,
-                }))
-            }, signers);
+                // Manually encode claimDlmmFees instruction (Anchor buffer too small for 16 accounts)
+                const discriminator = Buffer.from([102, 188, 67, 120, 236, 199, 117, 122]);
+                const claimedAmountBuf = Buffer.alloc(8);
+                const accountsLenBuf = Buffer.alloc(4);
+                accountsLenBuf.writeUInt32LE(addLiqCpiAccounts.length);
+                const accountsBufs = addLiqCpiAccounts.map((a: any) => {
+                    const buf = Buffer.alloc(34);
+                    (a.pubkey.toBuffer ? a.pubkey.toBuffer() : new PublicKey(a.pubkey).toBuffer()).copy(buf, 0);
+                    buf[32] = a.isSigner ? 1 : 0;
+                    buf[33] = a.isWritable ? 1 : 0;
+                    return buf;
+                });
+                const dataLenBuf = Buffer.alloc(4);
+                dataLenBuf.writeUInt32LE(addLiqIx.data.length);
+                const ixData = Buffer.concat([discriminator, claimedAmountBuf, accountsLenBuf, ...accountsBufs, dataLenBuf, Buffer.from(addLiqIx.data)]);
 
-            console.log('✅ Open Position Success:', tx);
-            console.log('=== DLMM Position Creation Completed ===');
+                const ix2 = new TransactionInstruction({
+                    programId: PROGRAM_ID,
+                    keys: [
+                        { pubkey: publicKey, isSigner: true, isWritable: true },
+                        { pubkey: globalConfigPda, isSigner: false, isWritable: true },
+                        { pubkey: dlmmPositionPda, isSigner: false, isWritable: true },
+                        { pubkey: vaultStatePda, isSigner: false, isWritable: true },
+                        { pubkey: DLMM_PROGRAM_ID, isSigner: false, isWritable: false },
+                        ...addLiqRemaining,
+                    ],
+                    data: ixData,
+                });
+
+                // Get or create persistent ALT
+                const allKeys = ix2.keys.map(k => k.pubkey);
+                const { account: altAccount } = await getOrCreateAlt(allKeys);
+
+                // Build and send TX2 with ALT + compute budget
+                const computeIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 });
+                const bh2 = await connection.getLatestBlockhash();
+                const msg2 = new TransactionMessage({
+                    payerKey: publicKey, recentBlockhash: bh2.blockhash, instructions: [computeIx, ix2],
+                }).compileToV0Message([altAccount]);
+                let tx2 = new VersionedTransaction(msg2);
+                tx2 = await signTransaction(tx2) as any;
+                const txId2 = await connection.sendRawTransaction(tx2.serialize());
+                console.log('TX2 sent:', txId2);
+                await connection.confirmTransaction({ signature: txId2, blockhash: bh2.blockhash, lastValidBlockHeight: bh2.lastValidBlockHeight });
+                console.log('TX2 confirmed: liquidity added!');
+            }
+
             await fetchState();
-            return tx;
+            await fetchPositions();
+            return txId1;
 
         } catch (error) {
-            console.error('❌ Open DLMM Position failed:', error);
-            console.error('Error details:', {
-                name: (error as any)?.name,
-                message: (error as any)?.message,
-                code: (error as any)?.code,
-                logs: (error as any)?.logs,
-                stack: (error as any)?.stack
-            });
+            console.error('Open DLMM Position failed:', error);
             throw error;
         } finally {
             setLoading(false);
@@ -924,81 +1061,313 @@ export function useVault() {
     };
 
 
+    /**
+     * Get or create a persistent ALT for Meteora CPI operations.
+     * Stored in localStorage to avoid paying ~0.005 SOL rent each time.
+     * Extends the ALT with any new accounts not already in it.
+     */
+    const getOrCreateAlt = async (
+        neededKeys: PublicKey[],
+    ): Promise<{ address: PublicKey; account: any }> => {
+        if (!publicKey || !signTransaction) throw new Error('Wallet not connected');
+
+        const ALT_STORAGE_KEY = `vault_alt_${publicKey.toBase58()}`;
+        const uniqueNeeded = [...new Set(neededKeys.map(k => k.toBase58()))].map(k => new PublicKey(k));
+
+        // Try to load existing ALT from localStorage
+        const storedAlt = typeof window !== 'undefined' ? localStorage.getItem(ALT_STORAGE_KEY) : null;
+        if (storedAlt) {
+            try {
+                const altAddress = new PublicKey(storedAlt);
+                const resp = await connection.getAddressLookupTable(altAddress);
+                if (resp.value) {
+                    const existingAddrs = new Set(resp.value.state.addresses.map(a => a.toBase58()));
+                    const missing = uniqueNeeded.filter(k => !existingAddrs.has(k.toBase58()));
+
+                    if (missing.length === 0) {
+                        console.log('Reusing existing ALT:', altAddress.toBase58());
+                        return { address: altAddress, account: resp.value };
+                    }
+
+                    // Extend with missing accounts
+                    if (missing.length > 0) {
+                        console.log(`Extending ALT with ${missing.length} new accounts...`);
+                        const extendIxs: TransactionInstruction[] = [];
+                        for (let i = 0; i < missing.length; i += 30) {
+                            extendIxs.push(AddressLookupTableProgram.extendLookupTable({
+                                lookupTable: altAddress, authority: publicKey, payer: publicKey,
+                                addresses: missing.slice(i, i + 30),
+                            }));
+                        }
+                        const bh = await connection.getLatestBlockhash();
+                        let tx = new VersionedTransaction(new TransactionMessage({
+                            payerKey: publicKey, recentBlockhash: bh.blockhash, instructions: extendIxs,
+                        }).compileToV0Message());
+                        tx = await signTransaction(tx) as any;
+                        const txId = await connection.sendRawTransaction(tx.serialize());
+                        await connection.confirmTransaction({ signature: txId, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight });
+
+                        // Wait for extension to be visible
+                        for (let i = 0; i < 20; i++) {
+                            await new Promise(r => setTimeout(r, 500));
+                            const updated = await connection.getAddressLookupTable(altAddress);
+                            if (updated.value && updated.value.state.addresses.length >= existingAddrs.size + missing.length) {
+                                console.log('ALT extended:', updated.value.state.addresses.length, 'addresses');
+                                return { address: altAddress, account: updated.value };
+                            }
+                        }
+                        // Refetch one more time
+                        const final = await connection.getAddressLookupTable(altAddress);
+                        if (final.value) return { address: altAddress, account: final.value };
+                    }
+                }
+            } catch (e) {
+                console.warn('Stored ALT invalid, creating new one:', e);
+            }
+        }
+
+        // Create new ALT
+        console.log('Creating new persistent ALT...');
+        const recentSlot = await connection.getSlot("finalized");
+        const [createAltIx, altAddress] = AddressLookupTableProgram.createLookupTable({
+            authority: publicKey, payer: publicKey, recentSlot,
+        });
+        const extendIxs: TransactionInstruction[] = [];
+        for (let i = 0; i < uniqueNeeded.length; i += 30) {
+            extendIxs.push(AddressLookupTableProgram.extendLookupTable({
+                lookupTable: altAddress, authority: publicKey, payer: publicKey,
+                addresses: uniqueNeeded.slice(i, i + 30),
+            }));
+        }
+
+        const bh = await connection.getLatestBlockhash();
+        let tx = new VersionedTransaction(new TransactionMessage({
+            payerKey: publicKey, recentBlockhash: bh.blockhash, instructions: [createAltIx, ...extendIxs],
+        }).compileToV0Message());
+        tx = await signTransaction(tx) as any;
+        const txId = await connection.sendRawTransaction(tx.serialize());
+        await connection.confirmTransaction({ signature: txId, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight });
+
+        // Store for reuse
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(ALT_STORAGE_KEY, altAddress.toBase58());
+        }
+        console.log('Persistent ALT created:', altAddress.toBase58());
+
+        // Wait for activation
+        for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 500));
+            const resp = await connection.getAddressLookupTable(altAddress);
+            if (resp.value && resp.value.state.addresses.length > 0) {
+                return { address: altAddress, account: resp.value };
+            }
+        }
+        throw new Error("ALT failed to activate");
+    };
+
+    /**
+     * Helper: send a Meteora CPI instruction via the claimDlmmFees handler with a persistent ALT.
+     * Used for removeLiquidity, claimFees, addLiquidity, etc.
+     */
+    const sendMeteoraCpiWithAlt = async (
+        meteoraIx: TransactionInstruction,
+        dlmmPositionPda: PublicKey,
+        globalConfigPda: PublicKey,
+        vaultStatePda: PublicKey,
+        accountSwaps?: Map<string, PublicKey>,
+        claimedAmount: number = 0,
+    ) => {
+        if (!publicKey || !signTransaction) throw new Error('Wallet not connected');
+        const DLMM_PROGRAM_ID = new PublicKey('LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo');
+
+        // Build CPI accounts with optional swaps
+        const cpiAccounts = meteoraIx.keys.map((k: any) => {
+            let pubkey = k.pubkey;
+            if (accountSwaps) {
+                const swap = accountSwaps.get(pubkey.toBase58());
+                if (swap) pubkey = swap;
+            }
+            return { pubkey, isSigner: k.isSigner, isWritable: k.isWritable };
+        });
+
+        const remainingAccounts = cpiAccounts.map((m: any) => ({
+            pubkey: m.pubkey, isSigner: false, isWritable: m.isWritable,
+        }));
+
+        // Manually encode claimDlmmFees instruction
+        const discriminator = Buffer.from([102, 188, 67, 120, 236, 199, 117, 122]);
+        const claimedAmountBuf = Buffer.alloc(8);
+        // Write claimed_amount as u64 little-endian
+        const claimedBigInt = BigInt(Math.floor(claimedAmount));
+        claimedAmountBuf.writeBigUInt64LE(claimedBigInt);
+        const accountsLenBuf = Buffer.alloc(4);
+        accountsLenBuf.writeUInt32LE(cpiAccounts.length);
+        const accountsBufs = cpiAccounts.map((a: any) => {
+            const buf = Buffer.alloc(34);
+            (a.pubkey.toBuffer ? a.pubkey.toBuffer() : new PublicKey(a.pubkey).toBuffer()).copy(buf, 0);
+            buf[32] = a.isSigner ? 1 : 0;
+            buf[33] = a.isWritable ? 1 : 0;
+            return buf;
+        });
+        const dataLenBuf = Buffer.alloc(4);
+        dataLenBuf.writeUInt32LE(meteoraIx.data.length);
+        const ixData = Buffer.concat([discriminator, claimedAmountBuf, accountsLenBuf, ...accountsBufs, dataLenBuf, Buffer.from(meteoraIx.data)]);
+
+        const ix = new TransactionInstruction({
+            programId: PROGRAM_ID,
+            keys: [
+                { pubkey: publicKey, isSigner: true, isWritable: true },
+                { pubkey: globalConfigPda, isSigner: false, isWritable: true },
+                { pubkey: dlmmPositionPda, isSigner: false, isWritable: true },
+                { pubkey: vaultStatePda, isSigner: false, isWritable: true },
+                { pubkey: DLMM_PROGRAM_ID, isSigner: false, isWritable: false },
+                ...remainingAccounts,
+            ],
+            data: ixData,
+        });
+
+        // Get or create persistent ALT with all needed accounts
+        const allKeys = ix.keys.map(k => k.pubkey);
+        const { account: altAccount } = await getOrCreateAlt(allKeys);
+
+        // Send CPI tx with ALT + compute budget
+        const computeIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 });
+        const bh = await connection.getLatestBlockhash();
+        let tx = new VersionedTransaction(new TransactionMessage({
+            payerKey: publicKey, recentBlockhash: bh.blockhash, instructions: [computeIx, ix],
+        }).compileToV0Message([altAccount]));
+        tx = await signTransaction(tx) as any;
+        const txId = await connection.sendRawTransaction(tx.serialize());
+        await connection.confirmTransaction({ signature: txId, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight });
+
+        return txId;
+    };
+
     const closeDlmmPosition = async (positionPda: string) => {
-        if (!client || !publicKey || !globalConfig) throw new Error('Not initialized');
+        if (!program || !publicKey || !signTransaction || !globalConfig) throw new Error('Not initialized');
         setLoading(true);
         try {
-            const { vaultStatePda } = getPDAs();
-            const dlmmPosition = new PublicKey(positionPda);
+            const { globalConfigPda, vaultStatePda } = getPDAs();
+            const dlmmPositionPda = new PublicKey(positionPda);
+            const DLMM_PROGRAM_ID = new PublicKey('LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo');
+            const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
 
-            // We need to fetch the position account to get the pool and position pubkey
-            // However, the IDL might not expose the structure easily if it's dynamic
-            // But we know 'vault' has 'dlmmPosition' account type.
-            // Let's assume we can fetch it.
-            // const posAccount = await program.account.dlmmPosition.fetch(dlmmPosition);
-            // But we don't have the type imported easily here.
+            const positionAccount = await program.account.dlmmPosition.fetch(dlmmPositionPda);
+            const poolPubkey = positionAccount.dlmmPool as PublicKey;
+            const positionMint = positionAccount.positionNft as PublicKey;
 
-            // For now, we'll try to rely on the SDK helper if available, or just pass the PDA.
-            // The contract instruction `close_dlmm_position` takes `cpi_data`.
-            // `cpi_data` needs `pool`, `position_pubkey` (NFT mint usually), `user` (vault PDA).
-            // This is tricky because `close_dlmm_position` expects us to pass the correct accounts for CPI.
-            // If we don't know the Pool or Position Mint, we can't build the CPI.
-            // WE MUST FETCH THE DLMM POSITION ACCOUNT DATA FIRST.
+            console.log("Close Position:", { pool: poolPubkey.toBase58(), positionMint: positionMint.toBase58() });
 
-            if (!program) throw new Error('Program not initialized');
-            const positionAccount = await program.account.dlmmPosition.fetch(dlmmPosition);
-            console.log('Fetched DLMM Position Account:', JSON.stringify(positionAccount, null, 2));
+            // Load Meteora pool and position
+            const dlmmPool = await (await import('@meteora-ag/dlmm')).default.create(connection, poolPubkey);
 
-            // Handle potential key casing issues (snake_case vs camelCase)
-            // @ts-ignore
-            const poolPubkey = (positionAccount.dlmmPool || positionAccount.dlmm_pool || positionAccount.pool) as PublicKey;
-            // @ts-ignore
-            const positionMint = (positionAccount.positionNft || positionAccount.position_nft || positionAccount.positionPubkey) as PublicKey;
+            // Account swaps: USDC ATA → vault USDC PDA
+            const { getAssociatedTokenAddress: getAta } = await import('@solana/spl-token');
+            const globalConfigUsdcAta = await getAta(USDC_MINT, globalConfigPda, true);
+            const [vaultUsdcAccount] = PublicKey.findProgramAddressSync(
+                [Buffer.from("vault_usdc"), globalConfigPda.toBuffer()], PROGRAM_ID
+            );
+            const accountSwaps = new Map<string, PublicKey>();
+            accountSwaps.set(globalConfigUsdcAta.toBase58(), vaultUsdcAccount);
 
-            if (!poolPubkey || !positionMint) {
-                console.error("Missing pool or position mint in account data", positionAccount);
-                throw new Error("Invalid DlmmPosition account data");
+            // Step 1: Remove all liquidity, claim fees, and close Meteora position
+            // Uses shouldClaimAndClose to handle dust amounts that plain remove misses
+            try {
+                const posData = await dlmmPool.getPosition(positionMint);
+                const hasLiquidity = posData?.positionData?.positionBinData?.some(
+                    (b: any) => b.positionXAmount !== "0" || b.positionYAmount !== "0"
+                );
+                const hasFees = posData?.positionData?.feeX && !posData.positionData.feeX.isZero?.() ||
+                    posData?.positionData?.feeY && !posData.positionData.feeY.isZero?.();
+
+                if (hasLiquidity || hasFees) {
+                    console.log("Step 1: Removing liquidity + claiming fees...");
+                    const removeTxs = await dlmmPool.removeLiquidity({
+                        user: globalConfigPda,
+                        position: positionMint,
+                        fromBinId: posData.positionData.lowerBinId,
+                        toBinId: posData.positionData.upperBinId,
+                        bps: new (await import('bn.js')).default(10000), // 100%
+                        shouldClaimAndClose: true,
+                    } as any);
+
+                    // Extract all DLMM instructions from returned Transaction(s)
+                    const txArray = Array.isArray(removeTxs) ? removeTxs : [removeTxs];
+                    const allDlmmIxs: TransactionInstruction[] = [];
+                    for (const rtx of txArray) {
+                        const rixs = (rtx as any).instructions ?? (rtx as any).message?.instructions ?? [];
+                        for (const rix of rixs) {
+                            if (rix.programId && rix.programId.equals(DLMM_PROGRAM_ID)) {
+                                allDlmmIxs.push(rix);
+                            }
+                        }
+                    }
+
+                    // Send each DLMM instruction via CPI (removeLiquidity, claimFee, closePosition)
+                    for (let i = 0; i < allDlmmIxs.length; i++) {
+                        console.log(`  Sending DLMM CPI ${i + 1}/${allDlmmIxs.length}...`);
+                        await sendMeteoraCpiWithAlt(allDlmmIxs[i], dlmmPositionPda, globalConfigPda, vaultStatePda, accountSwaps);
+                    }
+                    console.log("Step 1 done: liquidity removed, fees claimed, Meteora position closed.");
+                } else {
+                    // No liquidity — just close the Meteora position directly
+                    console.log("No liquidity — closing empty Meteora position...");
+                    const cpiData = await buildClosePositionCpi({
+                        connection, pool: poolPubkey, user: globalConfigPda, positionPubkey: positionMint,
+                    });
+                    // Swap rentReceiver (account[2]) to admin
+                    const fixedAccounts = cpiData.accounts.map((a: any, i: number) => {
+                        const pubkey = (i === 2 && a.pubkey.equals(globalConfigPda)) ? publicKey : a.pubkey;
+                        return { pubkey, isSigner: a.isSigner, isWritable: a.isWritable };
+                    });
+                    const meteoraCloseIx = new TransactionInstruction({
+                        programId: DLMM_PROGRAM_ID,
+                        keys: fixedAccounts.map((a: any) => ({ pubkey: a.pubkey, isSigner: a.isSigner, isWritable: a.isWritable })),
+                        data: Buffer.from(cpiData.data),
+                    });
+                    await sendMeteoraCpiWithAlt(meteoraCloseIx, dlmmPositionPda, globalConfigPda, vaultStatePda);
+                }
+            } catch (e: any) {
+                console.warn("Meteora position cleanup:", e.message);
             }
 
-            // Ensure these are real PublicKeys (handle strings from JSON or decoding)
-            const poolPubkeyObj = new PublicKey(poolPubkey);
-            const positionMintObj = new PublicKey(positionMint);
-
-            console.log("Preparing Close CPI with:", {
-                pool: poolPubkeyObj.toBase58(),
-                user: getPDAs().globalConfigPda.toBase58(),
-                position: positionMintObj.toBase58(),
-                payer: publicKey?.toBase58()
-            });
-
-            if (!publicKey) throw new Error("Wallet not connected");
-
-            const cpiData = await buildClosePositionCpi({
-                connection,
-                pool: poolPubkeyObj,
-                // The position on-chain is owned by the Admin (payer), not GlobalConfig (PDA).
-                // Use publicKey (Admin) as the user/owner.
-                user: publicKey,
-                positionPubkey: positionMintObj,
-                payer: publicKey,
-            });
-
-            const tx = await client.closeDlmmPosition({
-                admin: publicKey,
-                globalConfig: getPDAs().globalConfigPda,
-                dlmmPosition: dlmmPosition, // The vault's tracking account
-                vaultState: vaultStatePda,
-                dlmmProgram: new PublicKey('LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo'),
-                cpiData,
-                remainingAccounts: (cpiData.accounts as any).map((m: any) => ({
-                    pubkey: m.pubkey,
-                    isSigner: m.isSigner,
-                    isWritable: m.isWritable
-                }))
-            });
+            // Step 2: Close our program's DlmmPosition tracking account
+            console.log("Step 2: Closing vault DlmmPosition account...");
+            // Use closeDlmmPositionAccount which just closes the PDA (no Meteora CPI needed)
+            // But closeDlmmPosition handler expects a Meteora CPI. Use a minimal no-op close.
+            // Actually, we need a closePosition CPI. If Meteora position is already closed,
+            // we use closeDlmmPositionAccount (which closes just the vault's tracking PDA).
+            const tx = await (program.methods as any)
+                .closeDlmmPositionAccount()
+                .accounts({
+                    admin: publicKey,
+                    globalConfig: globalConfigPda,
+                    dlmmPosition: dlmmPositionPda,
+                    vaultState: vaultStatePda,
+                })
+                .rpc();
 
             console.log('Close Position Success:', tx);
+
+            // Step 3: Close non-essential ATAs on globalConfigPda to reclaim rent.
+            // We keep SOL and USDC ATAs since they're used by most positions.
+            // Other token ATAs (created for specific pools) can be closed.
+            // Note: ATA owner is globalConfigPda (a PDA), so closing requires invoke_signed.
+            // The claimDlmmFees handler only forwards to Meteora, not SPL Token.
+            // TODO: Add an on-chain "close PDA token account" instruction to reclaim ATA rent.
+            const USDC_MINT_STR = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+            const SOL_MINT_STR = 'So11111111111111111111111111111111111111112';
+            const poolMintX = dlmmPool.lbPair.tokenXMint.toBase58();
+            const poolMintY = dlmmPool.lbPair.tokenYMint.toBase58();
+            const nonStandardMints = [poolMintX, poolMintY].filter(
+                m => m !== USDC_MINT_STR && m !== SOL_MINT_STR
+            );
+            if (nonStandardMints.length > 0) {
+                console.log(`Note: ${nonStandardMints.length} non-standard ATA(s) on globalConfigPda could be closed to reclaim ~${(nonStandardMints.length * 0.002).toFixed(3)} SOL rent. Requires program upgrade.`);
+            }
+
             await fetchState();
+            await fetchPositions();
             return tx;
         } catch (error) {
             console.error('Close DLMM Position failed:', error);
@@ -1009,20 +1378,51 @@ export function useVault() {
     };
 
     const claimDlmmFees = async (positionPda: string) => {
-        if (!client || !publicKey || !globalConfig) throw new Error('Not initialized');
+        if (!program || !publicKey || !signTransaction || !globalConfig) throw new Error('Not initialized');
         setLoading(true);
         try {
             const { globalConfigPda, vaultStatePda } = getPDAs();
+            const DLMM_PROGRAM_ID = new PublicKey('LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo');
             const dlmmPosition = new PublicKey(positionPda);
-            const positionAccount = await program!.account.dlmmPosition.fetch(dlmmPosition);
+            const positionAccount = await program.account.dlmmPosition.fetch(dlmmPosition);
 
             const poolPubkey = positionAccount.dlmmPool as PublicKey;
             const positionPubkey = positionAccount.positionNft as PublicKey;
 
+            // Fetch actual fee amounts from Meteora to update TVL
+            let feeValueUsdc = 0;
+            try {
+                const dlmmPool = await (await import('@meteora-ag/dlmm')).default.create(connection, poolPubkey);
+                const posData = await dlmmPool.getPosition(positionPubkey);
+                if (posData?.positionData) {
+                    const mintX = dlmmPool.lbPair.tokenXMint;
+                    const mintY = dlmmPool.lbPair.tokenYMint;
+                    const xDecimals = mintX.toBase58() === 'So11111111111111111111111111111111111111112' ? 9 : 6;
+                    const yDecimals = mintY.toBase58() === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ? 6 : 9;
+
+                    const feeX = posData.positionData.feeX ? Number(posData.positionData.feeX.toString()) / Math.pow(10, xDecimals) : 0;
+                    const feeY = posData.positionData.feeY ? Number(posData.positionData.feeY.toString()) / Math.pow(10, yDecimals) : 0;
+
+                    // Convert fees to USDC value
+                    const activeBin = await dlmmPool.getActiveBin();
+                    const rawPrice = parseFloat(activeBin.price);
+                    const decimalMultiplier = Math.pow(10, xDecimals - yDecimals);
+                    const priceXinY = rawPrice * decimalMultiplier;
+
+                    feeValueUsdc = feeX * priceXinY + feeY;
+                    console.log(`Fees to claim: ${feeX} X ($${(feeX * priceXinY).toFixed(4)}) + ${feeY} Y ($${feeY.toFixed(4)}) = $${feeValueUsdc.toFixed(4)} USDC`);
+                }
+            } catch (e) {
+                console.warn('Could not fetch fee amounts, TVL will not be updated:', e);
+            }
+
+            // Convert USDC value to raw amount (6 decimals)
+            const claimedAmountRaw = Math.floor(feeValueUsdc * 1e6);
+
             const cpiData = await buildClaimSwapFeeCpi({
                 connection,
                 pool: poolPubkey,
-                user: publicKey, // Position is owned by Admin
+                user: globalConfigPda,
                 positionPubkey,
             });
 
@@ -1032,28 +1432,22 @@ export function useVault() {
                 return;
             }
 
-            // We need to provide the amount claimed for TVL tracking.
-            // In a real scenario, we'd simulate or parse the amount from the claim result.
-            // For now, we'll use a placeholder or 0 if we can't easily determine it before the TX.
-            // Actually, the contract adds this to `total_tvl`.
-            const tx = await client.claimDlmmFees({
-                admin: publicKey,
-                globalConfig: globalConfigPda,
-                dlmmPosition,
-                vaultState: vaultStatePda,
-                dlmmProgram: new PublicKey('LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo'),
-                claimedAmount: new BN(0), // Admin can update this manually if needed, or we fetch later
-                cpiData,
-                remainingAccounts: (cpiData.accounts as any).map((m: any) => ({
-                    pubkey: m.pubkey,
-                    isSigner: m.isSigner,
-                    isWritable: m.isWritable
-                }))
+            // Reconstruct TransactionInstruction from CPI data for the helper
+            const meteoraIx = new TransactionInstruction({
+                programId: DLMM_PROGRAM_ID,
+                keys: cpiData.accounts.map((a: any) => ({
+                    pubkey: a.pubkey, isSigner: a.isSigner, isWritable: a.isWritable,
+                })),
+                data: Buffer.from(cpiData.data),
             });
 
-            console.log('Claim DLMM Fees success:', tx);
+            const txId = await sendMeteoraCpiWithAlt(
+                meteoraIx, dlmmPosition, globalConfigPda, vaultStatePda,
+                undefined, claimedAmountRaw
+            );
+            console.log(`Claim DLMM Fees success: ${txId}, TVL updated by ${claimedAmountRaw} (raw USDC)`);
             await fetchState();
-            return tx;
+            return txId;
         } catch (error) {
             console.error('Claim DLMM Fees failed:', error);
             throw error;
@@ -1230,60 +1624,49 @@ export function useVault() {
 
     const [activePositions, setActivePositions] = useState<any[]>([]);
 
-    useEffect(() => {
+    const fetchPositions = useCallback(async () => {
         if (!program || !vaultState) return;
-        const fetchPositions = async () => {
-            try {
-                const count = Number(vaultState.positionsCount);
-                if (count === 0) {
-                    setActivePositions([]);
-                    return;
-                }
-
-                // Generate PDAs for all positions (0 to count + 5 to catch any ahead-of-counter positions)
-                const scanCount = count + 5;
-                const pdas: PublicKey[] = [];
-                for (let i = 0; i < scanCount; i++) {
-                    const [pda] = PublicKey.findProgramAddressSync(
-                        [Buffer.from('dlmm_position'), Buffer.from([i])],
-                        PROGRAM_ID
-                    );
-                    pdas.push(pda);
-                }
-
-                // Robust fetch: get account info and try to decode individually
-                // This prevents one corrupt account from failing the entire fetch
-                const accountInfos = await connection.getMultipleAccountsInfo(pdas);
-
-                const validPositions = accountInfos.map((info, i) => {
-                    if (!info) return null;
-                    try {
-                        let account;
-                        try {
-                            // Try PascalCase first
-                            account = program.coder.accounts.decode("DlmmPosition", info.data);
-                        } catch (e) {
-                            // Fallback to camelCase
-                            console.warn(`Failed to decode with PascalCase, trying camelCase for index ${i}...`);
-                            account = program.coder.accounts.decode("dlmmPosition", info.data);
-                        }
-                        return {
-                            publicKey: pdas[i],
-                            account: account
-                        };
-                    } catch (err) {
-                        console.warn(`Failed to decode position ${i} (${pdas[i].toBase58()}):`, err);
-                        return null;
-                    }
-                }).filter(p => p !== null);
-
-                setActivePositions(validPositions);
-            } catch (e) {
-                console.error("Failed to fetch positions:", e);
+        try {
+            const count = Number(vaultState.positionsCount);
+            // Always scan a few extra slots in case counter is stale
+            const scanCount = Math.max(count + 5, 10);
+            const pdas: PublicKey[] = [];
+            for (let i = 0; i < scanCount; i++) {
+                const [pda] = PublicKey.findProgramAddressSync(
+                    [Buffer.from('dlmm_position'), Buffer.from([i])],
+                    PROGRAM_ID
+                );
+                pdas.push(pda);
             }
-        };
+
+            const accountInfos = await connection.getMultipleAccountsInfo(pdas);
+
+            const validPositions = accountInfos.map((info, i) => {
+                if (!info) return null;
+                try {
+                    let account;
+                    try {
+                        account = program.coder.accounts.decode("DlmmPosition", info.data);
+                    } catch (e) {
+                        console.warn(`Failed to decode with PascalCase, trying camelCase for index ${i}...`);
+                        account = program.coder.accounts.decode("dlmmPosition", info.data);
+                    }
+                    return { publicKey: pdas[i], account };
+                } catch (err) {
+                    console.warn(`Failed to decode position ${i} (${pdas[i].toBase58()}):`, err);
+                    return null;
+                }
+            }).filter(p => p !== null);
+
+            setActivePositions(validPositions);
+        } catch (e) {
+            console.error("Failed to fetch positions:", e);
+        }
+    }, [program, vaultState, connection]);
+
+    useEffect(() => {
         fetchPositions();
-    }, [program, vaultState, isInitialized]);
+    }, [fetchPositions]);
 
     const updateVaultConfig = async (params: any) => {
         if (!client || !publicKey) throw new Error('Not initialized');
@@ -1333,6 +1716,7 @@ export function useVault() {
         withdrawDevFees,
         withdrawMarketerFees,
         simulateYield,
+        syncTvl,
         jupiter_swap: jupiterSwap,
         openDlmmPosition,
         closeDlmmPosition,

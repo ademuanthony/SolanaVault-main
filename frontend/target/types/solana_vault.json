@@ -1,5 +1,5 @@
 {
-  "address": "8ssaGrsiVrJqaUzCEhTfVUj6K1ZpXcdwx9xD9gxZWWvC",
+  "address": "B3SnRh6Snmk7PvvRHu2o3wDQRpFf1DBMaR9zQpjL4LPx",
   "metadata": {
     "name": "solana_vault",
     "version": "0.1.0",
@@ -473,6 +473,67 @@
               }
             ]
           }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "close_pda_token_account",
+      "docs": [
+        "Close a PDA-owned token account and return rent to admin (must have zero balance)"
+      ],
+      "discriminator": [
+        162,
+        108,
+        103,
+        172,
+        242,
+        60,
+        198,
+        243
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_account",
+          "docs": [
+            "The token account owned by globalConfigPda to close.",
+            "Must have zero balance."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
       "args": []
@@ -1101,6 +1162,98 @@
       ]
     },
     {
+      "name": "jupiter_swap_v2",
+      "docs": [
+        "Swap via Jupiter V2 — uses remaining_accounts for CPI metas.",
+        "Automatically transfers tokens between vault PDAs and standard ATAs",
+        "that Jupiter expects."
+      ],
+      "discriminator": [
+        28,
+        155,
+        14,
+        63,
+        87,
+        96,
+        62,
+        221
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "jupiter_program"
+        },
+        {
+          "name": "source_token_account",
+          "writable": true
+        },
+        {
+          "name": "destination_token_account",
+          "writable": true
+        },
+        {
+          "name": "jupiter_source_ata",
+          "docs": [
+            "The PDA's standard ATA for the input mint (where Jupiter expects source tokens).",
+            "Tokens are transferred here from source_token_account before the swap."
+          ],
+          "writable": true
+        },
+        {
+          "name": "jupiter_destination_ata",
+          "docs": [
+            "The PDA's standard ATA for the output mint (where Jupiter deposits output tokens).",
+            "Tokens are transferred from here to destination_token_account after the swap."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "swap_data",
+          "type": "bytes"
+        },
+        {
+          "name": "swap_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "open_dlmm_position",
       "docs": [
         "Open a DLMM position via Meteora (CPI)"
@@ -1620,6 +1773,84 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "update_tvl",
+      "docs": [
+        "Update TVL to reflect actual vault value (admin only, max 20% decrease per call)"
+      ],
+      "discriminator": [
+        126,
+        203,
+        107,
+        162,
+        169,
+        48,
+        79,
+        156
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_tvl",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "update_vault_config",
@@ -2373,6 +2604,16 @@
       "code": 6018,
       "name": "InvalidReferralDistribution",
       "msg": "Invalid referral distribution: total must be 100%"
+    },
+    {
+      "code": 6019,
+      "name": "TokenAccountNotEmpty",
+      "msg": "Token account must have zero balance before closing"
+    },
+    {
+      "code": 6020,
+      "name": "TvlDecreaseTooLarge",
+      "msg": "TVL decrease exceeds maximum allowed per update (20%)"
     }
   ],
   "types": [

@@ -8,11 +8,10 @@ use crate::errors::VaultError;
 use crate::state::GlobalConfig;
 
 /// Jupiter v6 Swap Program ID (mainnet)
-/// Devnet: Use the appropriate devnet program ID if needed
-/// Mainnet: JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4
+/// The v1 API (api.jup.ag/swap/v1/) still routes through v6 on-chain
 pub const JUPITER_V6_PROGRAM_ID_STR: &str = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 
-fn get_jupiter_program_id() -> Pubkey {
+pub fn get_jupiter_program_id() -> Pubkey {
     JUPITER_V6_PROGRAM_ID_STR
         .parse()
         .expect("Invalid Jupiter program ID")

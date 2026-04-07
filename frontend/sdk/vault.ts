@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
-import { PublicKey, SystemProgram } from "@solana/web3.js";
+import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction, AddressLookupTableAccount } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { SolanaVault } from "../target/types/solana_vault";
 import { JupiterSwapData } from "./jupiter";
@@ -98,6 +98,26 @@ export interface JupiterSwapArgs {
   minimumAmountOut: BN;
   swapData: JupiterSwapData;
   remainingAccounts: anchor.web3.AccountMeta[];
+  addressLookupTableAccounts?: AddressLookupTableAccount[];
+}
+
+export interface JupiterSwapV2Args {
+  admin: PublicKey;
+  globalConfig: PublicKey;
+  jupiterProgram: PublicKey;
+  sourceTokenAccount: PublicKey;
+  destinationTokenAccount: PublicKey;
+  jupiterSourceAta: PublicKey;
+  jupiterDestinationAta: PublicKey;
+  /** Raw Jupiter instruction data bytes */
+  swapData: Buffer;
+  /** Amount to swap (transferred from vault PDA to standard ATA before swap) */
+  swapAmount: BN;
+  /** Jupiter swap accounts in exact order — passed as remainingAccounts */
+  remainingAccounts: anchor.web3.AccountMeta[];
+  addressLookupTableAccounts?: AddressLookupTableAccount[];
+  /** Pre-swap instructions (e.g. ATA creation) to include before the CPI */
+  preInstructions?: TransactionInstruction[];
 }
 
 export interface OpenDlmmPositionArgs {
@@ -387,7 +407,7 @@ export class SolanaVaultClient {
 
   async jupiterSwap(args: JupiterSwapArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    const ix = await methods
       .jupiterSwap(args.amount, args.minimumAmountOut, {
         accounts: args.swapData.accounts,
         data: args.swapData.data,
@@ -400,10 +420,100 @@ export class SolanaVaultClient {
         destinationTokenAccount: args.destinationTokenAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .remainingAccounts(args.remainingAccounts);
+      .remainingAccounts(args.remainingAccounts)
+      .instruction();
 
-    if (signer) request.signers([signer]);
-    return request.rpc();
+    // Build a v0 VersionedTransaction with address lookup tables to stay under 1232 bytes
+    const provider = this.program.provider as anchor.AnchorProvider;
+    const latestBlockhash = await provider.connection.getLatestBlockhash();
+    const lookupTables = args.addressLookupTableAccounts || [];
+
+    const messageV0 = new TransactionMessage({
+      payerKey: args.admin,
+      recentBlockhash: latestBlockhash.blockhash,
+      instructions: [ix],
+    }).compileToV0Message(lookupTables);
+
+    const versionedTx = new VersionedTransaction(messageV0);
+
+    // Check size before signing to give a clear error
+    const rawSize = versionedTx.serialize().length;
+    console.log(`Jupiter swap tx size: ${rawSize} bytes (limit 1232), ALTs: ${lookupTables.length}, swap accounts: ${args.swapData.accounts.length}`);
+    if (rawSize > 1232) {
+      throw new Error(`Transaction too large: ${rawSize}/1232 bytes. Jupiter route uses too many accounts (${args.swapData.accounts.length}). Try a smaller or more common token pair.`);
+    }
+
+    if (signer) {
+      versionedTx.sign([signer]);
+    }
+
+    if (provider.wallet.signTransaction) {
+      const signed = await provider.wallet.signTransaction(versionedTx);
+      const txId = await provider.connection.sendRawTransaction(signed.serialize());
+      await provider.connection.confirmTransaction({
+        signature: txId,
+        blockhash: latestBlockhash.blockhash,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+      });
+      return txId;
+    }
+
+    throw new Error("Wallet does not support signTransaction");
+  }
+
+  async jupiterSwapV2(args: JupiterSwapV2Args) {
+    const methods: any = this.program.methods;
+    const swapIx = await methods
+      .jupiterSwapV2(args.swapData, args.swapAmount)
+      .accounts({
+        admin: args.admin,
+        globalConfig: args.globalConfig,
+        jupiterProgram: args.jupiterProgram,
+        sourceTokenAccount: args.sourceTokenAccount,
+        destinationTokenAccount: args.destinationTokenAccount,
+        jupiterSourceAta: args.jupiterSourceAta,
+        jupiterDestinationAta: args.jupiterDestinationAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts(args.remainingAccounts)
+      .instruction();
+
+    // Build full instruction list: pre-instructions → swap CPI
+    const instructions: TransactionInstruction[] = [
+      ...(args.preInstructions || []),
+      swapIx,
+    ];
+
+    const provider = this.program.provider as anchor.AnchorProvider;
+    const latestBlockhash = await provider.connection.getLatestBlockhash();
+    const lookupTables = args.addressLookupTableAccounts || [];
+
+    const messageV0 = new TransactionMessage({
+      payerKey: args.admin,
+      recentBlockhash: latestBlockhash.blockhash,
+      instructions,
+    }).compileToV0Message(lookupTables);
+
+    const versionedTx = new VersionedTransaction(messageV0);
+
+    const rawSize = versionedTx.serialize().length;
+    console.log(`Jupiter swap v2 tx size: ${rawSize} bytes (limit 1232), ALTs: ${lookupTables.length}, remaining accounts: ${args.remainingAccounts.length}`);
+    if (rawSize > 1232) {
+      throw new Error(`Transaction too large: ${rawSize}/1232 bytes (${args.remainingAccounts.length} accounts).`);
+    }
+
+    if (provider.wallet.signTransaction) {
+      const signed = await provider.wallet.signTransaction(versionedTx);
+      const txId = await provider.connection.sendRawTransaction(signed.serialize());
+      await provider.connection.confirmTransaction({
+        signature: txId,
+        blockhash: latestBlockhash.blockhash,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+      });
+      return txId;
+    }
+
+    throw new Error("Wallet does not support signTransaction");
   }
 
   async openDlmmPosition(args: OpenDlmmPositionArgs, signers: anchor.web3.Signer[] = []) {
@@ -413,20 +523,13 @@ export class SolanaVaultClient {
       dlmmPosition: args.dlmmPosition.toBase58(),
       vaultState: args.vaultState.toBase58(),
       dlmmProgram: args.dlmmProgram.toBase58(),
-      params: args.params,
-      cpiData: {
-        accountsCount: args.cpiData.accounts.length,
-        dataLength: args.cpiData.data.length,
-        dataHex: args.cpiData.data.toString('hex').substring(0, 100) + '...'
-      },
       remainingAccountsCount: args.remainingAccounts.length,
       signersCount: signers.length
     });
 
     const methods: any = this.program.methods;
-    console.log('[SDK] Calling program.methods.openDlmmPosition with params and cpiData...');
 
-    const request = methods
+    const ix = await methods
       .openDlmmPosition(args.params, args.cpiData)
       .accounts({
         admin: args.admin,
@@ -436,17 +539,39 @@ export class SolanaVaultClient {
         dlmmProgram: args.dlmmProgram,
         systemProgram: SystemProgram.programId,
       })
-      .remainingAccounts(args.remainingAccounts);
+      .remainingAccounts(args.remainingAccounts)
+      .instruction();
 
+    const provider = this.program.provider as anchor.AnchorProvider;
+    const latestBlockhash = await provider.connection.getLatestBlockhash();
+
+    const messageV0 = new TransactionMessage({
+      payerKey: args.admin,
+      recentBlockhash: latestBlockhash.blockhash,
+      instructions: [ix],
+    }).compileToV0Message();
+
+    const versionedTx = new VersionedTransaction(messageV0);
+
+    // Partial-sign with keypairs (e.g. position mint) BEFORE sending to wallet
     if (signers.length > 0) {
-      console.log('[SDK] Adding signers:', signers.map(s => s.publicKey.toBase58()));
-      request.signers(signers);
+      console.log('[SDK] Partial-signing with keypairs:', signers.map(s => s.publicKey.toBase58()));
+      versionedTx.sign(signers);
     }
 
-    console.log('[SDK] Sending transaction...');
-    const result = await request.rpc();
-    console.log('[SDK] Transaction successful:', result);
-    return result;
+    if (provider.wallet.signTransaction) {
+      const signed = await provider.wallet.signTransaction(versionedTx);
+      const txId = await provider.connection.sendRawTransaction(signed.serialize());
+      await provider.connection.confirmTransaction({
+        signature: txId,
+        blockhash: latestBlockhash.blockhash,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+      });
+      console.log('[SDK] Transaction successful:', txId);
+      return txId;
+    }
+
+    throw new Error("Wallet does not support signTransaction");
   }
 
   async closeDlmmPosition(args: CloseDlmmPositionArgs, signer?: anchor.web3.Signer) {

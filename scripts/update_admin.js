@@ -10,7 +10,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 async function updateAdmin() {
     // 1. CONFIGURATION
     const NEW_ADMIN_WALLET = 'H1A4qyRwZQhXL2ohUEw1Rsx1Kgp3WEcKCduMdZNe95xu';
-    const PROGRAM_ID = '8ssaGrsiVrJqaUzCEhTfVUj6K1ZpXcdwx9xD9gxZWWvC';
+    const PROGRAM_ID = 'B3SnRh6Snmk7PvvRHu2o3wDQRpFf1DBMaR9zQpjL4LPx';
     const RPC_URL = process.env.ANCHOR_PROVIDER_URL || 'https://solana-mainnet.core.chainstack.com/4ed69be823c47a9517d79bd7c873acf6';
 
     // 2. SETUP PROVIDER

@@ -92,68 +92,38 @@ export async function buildOpenPositionCpi(params: {
 
 /**
  * Build a Meteora DLMM "close position" instruction CPI payload.
+ *
+ * @param user - The position owner (globalConfigPda for vault-owned positions).
+ *               The SDK sets both `sender` and `rentReceiver` to this address.
+ *               Caller should swap `rentReceiver` to admin in the CPI data if needed.
  */
 export async function buildClosePositionCpi(params: {
   connection: Parameters<typeof DLMM.create>[0];
   pool: PublicKey;
   user: PublicKey;
   positionPubkey: PublicKey;
-  payer: PublicKey;
 }): Promise<DlmmCpiData> {
   const pool = await DLMM.create(params.connection, params.pool);
 
-  console.log("Fetching positions for owner:", params.user.toBase58());
-  const { userPositions } = await pool.getPositionsByUserAndLbPair(params.user);
-  console.log("Found user positions mapping for pool:", userPositions.length);
-
-  // The params.positionPubkey IS the Position Account Address (stored as positionNft in vault state).
-  const expectedPositionPubkey = params.positionPubkey;
-  console.log("Using Position Address:", expectedPositionPubkey.toBase58());
-
-  // Check if the account exists checks
-  const positionAccountInfo = await params.connection.getAccountInfo(expectedPositionPubkey);
-  if (!positionAccountInfo) {
-    console.error("CRITICAL: Position Account does not exist on-chain:", expectedPositionPubkey.toBase58());
-    throw new Error("Position Account not found");
-  } else {
-    console.log("Confirmed Position Account exists on-chain. Owner Program:", positionAccountInfo.owner.toBase58());
-  }
-
-  // Attempt to fetch and parse data directly using Anchor
-  let positionData;
+  // Fetch position data to build the LbPosition object Meteora SDK expects
+  let positionData: any;
   try {
-    positionData = await pool.program.account.position.fetch(expectedPositionPubkey);
-    console.log("Fetched Position Info directly from chain.");
-    // Check owner just for debugging
-    if (positionData.owner && positionData.owner.toBase58() !== params.user.toBase58()) {
-      console.warn(`WARNING: Position owner mismatch! On-chain: ${positionData.owner.toBase58()}, Expected: ${params.user.toBase58()}`);
-    }
-  } catch (e) {
-    console.error("Failed to fetch/parse position data via Anchor:", e);
+    positionData = await pool.program.account.positionV2.fetch(params.positionPubkey);
+  } catch {
+    positionData = await pool.program.account.position.fetch(params.positionPubkey);
   }
 
-  let positionToClose = userPositions.find(p => p.publicKey.equals(expectedPositionPubkey));
-
-  if (!positionToClose && positionData) {
-    console.log("Constructing LbPosition object manually from fetched data...");
-    positionToClose = {
-      publicKey: expectedPositionPubkey,
-      positionData: positionData as any,
-      version: 1 // Default to V2 (which is 1 in internal enum usually, but let's check)
-    };
-  }
-
-  if (!positionToClose) {
-    throw new Error(`Position not found/constructible for address ${params.positionPubkey.toBase58()}`);
-  }
+  const positionToClose = {
+    publicKey: params.positionPubkey,
+    positionData: positionData,
+    version: 1,
+  };
 
   const tx = await pool.closePosition({
     owner: params.user,
     position: positionToClose,
-    payer: params.payer,
   } as any);
 
-  // SDK versions differ; handle common shapes.
   const ixs =
     tx.instructions ??
     (tx as any).message?.instructions ??
