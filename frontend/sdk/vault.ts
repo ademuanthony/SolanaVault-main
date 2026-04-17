@@ -172,6 +172,45 @@ export interface AcceptAdminArgs {
   globalConfig: PublicKey;
 }
 
+export interface FlagUserArgs {
+  admin: PublicKey;
+  globalConfig: PublicKey;
+  userAccount: PublicKey;
+}
+
+export interface UnflagUserArgs {
+  admin: PublicKey;
+  globalConfig: PublicKey;
+  userAccount: PublicKey;
+}
+
+export interface AdminRegisterUserArgs {
+  admin: PublicKey;
+  globalConfig: PublicKey;
+  userAccount: PublicKey;
+  userWallet: PublicKey;
+  referrer: PublicKey | null;
+}
+
+export interface CloseUserAccountArgs {
+  authority: PublicKey;
+  globalConfig: PublicKey;
+  userAccount: PublicKey;
+  rentReceiver: PublicKey;
+}
+
+export interface CloseDlmmPositionAccountArgs {
+  admin: PublicKey;
+  globalConfig: PublicKey;
+  dlmmPosition: PublicKey;
+}
+
+export interface UpdateVaultConfigArgs {
+  admin: PublicKey;
+  globalConfig: PublicKey;
+  params: any; // UpdateConfigParams from IDL
+}
+
 export interface SetDevWalletArgs {
   devAuthority: PublicKey;
   globalConfig: PublicKey;
@@ -505,6 +544,85 @@ export class SolanaVaultClient {
       })
       .signers([signer])
       .rpc();
+  }
+
+  async flagUser(args: FlagUserArgs, signer?: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    let b = methods
+      .flagUser()
+      .accounts({
+        admin: args.admin,
+        globalConfig: args.globalConfig,
+        userAccount: args.userAccount,
+      });
+    if (signer) b = b.signers([signer]);
+    return b.rpc();
+  }
+
+  async unflagUser(args: UnflagUserArgs, signer?: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    let b = methods
+      .unflagUser()
+      .accounts({
+        admin: args.admin,
+        globalConfig: args.globalConfig,
+        userAccount: args.userAccount,
+      });
+    if (signer) b = b.signers([signer]);
+    return b.rpc();
+  }
+
+  async adminRegisterUser(args: AdminRegisterUserArgs, signer?: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    let b = methods
+      .adminRegisterUser(args.userWallet, args.referrer)
+      .accounts({
+        admin: args.admin,
+        globalConfig: args.globalConfig,
+        userAccount: args.userAccount,
+        systemProgram: SystemProgram.programId,
+      });
+    if (signer) b = b.signers([signer]);
+    return b.rpc();
+  }
+
+  async closeUserAccount(args: CloseUserAccountArgs, signer?: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    let b = methods
+      .closeUserAccount()
+      .accounts({
+        authority: args.authority,
+        globalConfig: args.globalConfig,
+        userAccount: args.userAccount,
+        rentReceiver: args.rentReceiver,
+      });
+    if (signer) b = b.signers([signer]);
+    return b.rpc();
+  }
+
+  async closeDlmmPositionAccount(args: CloseDlmmPositionAccountArgs, signer?: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    let b = methods
+      .closeDlmmPositionAccount()
+      .accounts({
+        admin: args.admin,
+        globalConfig: args.globalConfig,
+        dlmmPosition: args.dlmmPosition,
+      });
+    if (signer) b = b.signers([signer]);
+    return b.rpc();
+  }
+
+  async updateVaultConfig(args: UpdateVaultConfigArgs, signer?: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    let b = methods
+      .updateVaultConfig(args.params)
+      .accounts({
+        admin: args.admin,
+        globalConfig: args.globalConfig,
+      });
+    if (signer) b = b.signers([signer]);
+    return b.rpc();
   }
 
   async setDevWallet(args: SetDevWalletArgs, signer: anchor.web3.Signer) {

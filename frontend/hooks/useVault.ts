@@ -1397,7 +1397,6 @@ export function useVault() {
                     admin: publicKey,
                     globalConfig: globalConfigPda,
                     dlmmPosition: dlmmPositionPda,
-                    vaultState: vaultStatePda,
                 })
                 .rpc();
 
