@@ -30,7 +30,7 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 
-const PROGRAM_ID = new PublicKey("3TV5FTYziezR5xrp9SAeR6zLU4brnTLQuegjixpBrV1t");
+const PROGRAM_ID = new PublicKey("G9hoVfjm6QHGMQZpHpVsUGQmSBD6LQaXk9UbD5BzqtWR");
 const RPC_URL = process.env.ANCHOR_PROVIDER_URL || "https://solana-mainnet.core.chainstack.com/4ed69be823c47a9517d79bd7c873acf6";
 
 function loadPayer(): Keypair {

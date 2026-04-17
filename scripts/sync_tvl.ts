@@ -7,7 +7,7 @@ import BN from "bn.js";
 import * as fs from "fs";
 import * as path from "path";
 
-const PROGRAM_ID = new PublicKey("3TV5FTYziezR5xrp9SAeR6zLU4brnTLQuegjixpBrV1t");
+const PROGRAM_ID = new PublicKey("G9hoVfjm6QHGMQZpHpVsUGQmSBD6LQaXk9UbD5BzqtWR");
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const JUP_PRICE_URL = "https://lite-api.jup.ag/price/v3";
 

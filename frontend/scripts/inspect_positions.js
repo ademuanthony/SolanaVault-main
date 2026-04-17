@@ -6,7 +6,7 @@ const path = require('path');
 
 // IDL and Program ID
 const IDL_PATH = path.join(__dirname, 'target/types/solana_vault.json');
-const PROGRAM_ID = new PublicKey('3TV5FTYziezR5xrp9SAeR6zLU4brnTLQuegjixpBrV1t');
+const PROGRAM_ID = new PublicKey('G9hoVfjm6QHGMQZpHpVsUGQmSBD6LQaXk9UbD5BzqtWR');
 
 async function main() {
     const connection = new Connection("https://api.devnet.solana.com", "confirmed");

@@ -13,7 +13,7 @@ import { SolanaVault } from '../target/types/solana_vault';
 import IDL from '../target/types/solana_vault.json';
 
 export const PROGRAM_ID = new PublicKey(
-    process.env.NEXT_PUBLIC_PROGRAM_ID || '3TV5FTYziezR5xrp9SAeR6zLU4brnTLQuegjixpBrV1t'
+    process.env.NEXT_PUBLIC_PROGRAM_ID || 'G9hoVfjm6QHGMQZpHpVsUGQmSBD6LQaXk9UbD5BzqtWR'
 );
 const JUPITER_PROGRAM_ID = new PublicKey('JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4');
 

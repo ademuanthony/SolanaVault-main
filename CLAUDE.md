@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SolanaVault (Zolana) is a Solana yield aggregator where users deposit USDC and earn yield through automated Meteora DLMM strategies. It combines an Anchor smart contract, a Next.js frontend, and a TypeScript SDK.
 
-**Program ID**: `3TV5FTYziezR5xrp9SAeR6zLU4brnTLQuegjixpBrV1t` (Devnet)
+**Program ID**: `G9hoVfjm6QHGMQZpHpVsUGQmSBD6LQaXk9UbD5BzqtWR` (Devnet)
 
 ## Commands
 
