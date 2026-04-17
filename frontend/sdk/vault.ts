@@ -244,7 +244,7 @@ export interface WithdrawMarketerFeesArgs {
 export class SolanaVaultClient {
   constructor(public readonly program: Program<SolanaVault>) { }
 
-  async initialize(args: InitializeArgs, signer: anchor.web3.Signer) {
+  async initialize(args: InitializeArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .initialize({
@@ -269,11 +269,11 @@ export class SolanaVaultClient {
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async register(args: RegisterArgs, signer: anchor.web3.Signer) {
+  async register(args: RegisterArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .register(args.referrer ?? null)
@@ -283,11 +283,11 @@ export class SolanaVaultClient {
         userAccount: args.userAccount,
         systemProgram: SystemProgram.programId,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async deposit(args: DepositArgs, signer: anchor.web3.Signer) {
+  async deposit(args: DepositArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .deposit(args.amount)
@@ -302,11 +302,11 @@ export class SolanaVaultClient {
         vaultState: args.vaultState,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async withdraw(args: WithdrawArgs, signer: anchor.web3.Signer) {
+  async withdraw(args: WithdrawArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     // Check if remainingAccounts are provided and valid
     const remaining = args.remainingAccounts || [];
@@ -333,7 +333,7 @@ export class SolanaVaultClient {
         systemProgram: SystemProgram.programId,
       })
       .remainingAccounts(remaining)
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
@@ -355,11 +355,11 @@ export class SolanaVaultClient {
         marketer1UsdcAccount: args.marketer1UsdcAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       });
-    if (signer) builder = builder.signers([signer]);
+    if (signer) builder = builder.signers(signer ? [signer] : []);
     return builder.rpc();
   }
 
-  async claimReferralEarnings(args: ClaimReferralEarningsArgs, signer: anchor.web3.Signer) {
+  async claimReferralEarnings(args: ClaimReferralEarningsArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .claimReferralEarnings()
@@ -371,11 +371,11 @@ export class SolanaVaultClient {
         vaultUsdcAccount: args.vaultUsdcAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async welcomeBonusDeposit(args: WelcomeBonusDepositArgs, signer: anchor.web3.Signer) {
+  async welcomeBonusDeposit(args: WelcomeBonusDepositArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .welcomeBonusDeposit()
@@ -389,11 +389,11 @@ export class SolanaVaultClient {
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .remainingAccounts(args.remainingAccounts)
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async setCompanyWallet(args: SetCompanyWalletArgs, signer: anchor.web3.Signer) {
+  async setCompanyWallet(args: SetCompanyWalletArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .setCompanyWallet(args.newCompanyWallet)
@@ -401,11 +401,11 @@ export class SolanaVaultClient {
         admin: args.admin,
         globalConfig: args.globalConfig,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async withdrawCompanyFees(args: WithdrawCompanyFeesArgs, signer: anchor.web3.Signer) {
+  async withdrawCompanyFees(args: WithdrawCompanyFeesArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .withdrawCompanyFees(args.amount)
@@ -416,7 +416,7 @@ export class SolanaVaultClient {
         vaultUsdcAccount: args.vaultUsdcAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
@@ -442,7 +442,7 @@ export class SolanaVaultClient {
     if (args.preInstructions && args.preInstructions.length > 0) {
       builder = builder.preInstructions(args.preInstructions);
     }
-    if (signer) builder = builder.signers([signer]);
+    if (signer) builder = builder.signers(signer ? [signer] : []);
     return builder.rpc(
       args.addressLookupTableAccounts
         ? { addressLookupTableAccounts: args.addressLookupTableAccounts }
@@ -450,7 +450,7 @@ export class SolanaVaultClient {
     );
   }
 
-  async jupiterSwap(args: JupiterSwapArgs, signer: anchor.web3.Signer) {
+  async jupiterSwap(args: JupiterSwapArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .jupiterSwap(args.amount, args.minimumAmountOut, {
@@ -466,7 +466,7 @@ export class SolanaVaultClient {
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .remainingAccounts(args.remainingAccounts)
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
@@ -489,7 +489,7 @@ export class SolanaVaultClient {
       .rpc();
   }
 
-  async closeDlmmPosition(args: CloseDlmmPositionArgs, signer: anchor.web3.Signer) {
+  async closeDlmmPosition(args: CloseDlmmPositionArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .closeDlmmPosition(args.cpiData)
@@ -503,11 +503,11 @@ export class SolanaVaultClient {
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .remainingAccounts(args.remainingAccounts)
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async claimDlmmFees(args: ClaimDlmmFeesArgs, signer: anchor.web3.Signer) {
+  async claimDlmmFees(args: ClaimDlmmFeesArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .claimDlmmFees(args.cpiData)
@@ -518,11 +518,11 @@ export class SolanaVaultClient {
         dlmmProgram: args.dlmmProgram,
       })
       .remainingAccounts(args.remainingAccounts)
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async proposeNewAdmin(args: ProposeNewAdminArgs, signer: anchor.web3.Signer) {
+  async proposeNewAdmin(args: ProposeNewAdminArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .proposeNewAdmin(args.newAdmin)
@@ -530,11 +530,11 @@ export class SolanaVaultClient {
         admin: args.admin,
         globalConfig: args.globalConfig,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async acceptAdmin(args: AcceptAdminArgs, signer: anchor.web3.Signer) {
+  async acceptAdmin(args: AcceptAdminArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .acceptAdmin()
@@ -542,7 +542,7 @@ export class SolanaVaultClient {
         newAdmin: args.newAdmin,
         globalConfig: args.globalConfig,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
@@ -555,7 +555,7 @@ export class SolanaVaultClient {
         globalConfig: args.globalConfig,
         userAccount: args.userAccount,
       });
-    if (signer) b = b.signers([signer]);
+    if (signer) b = b.signers(signer ? [signer] : []);
     return b.rpc();
   }
 
@@ -568,7 +568,7 @@ export class SolanaVaultClient {
         globalConfig: args.globalConfig,
         userAccount: args.userAccount,
       });
-    if (signer) b = b.signers([signer]);
+    if (signer) b = b.signers(signer ? [signer] : []);
     return b.rpc();
   }
 
@@ -582,7 +582,7 @@ export class SolanaVaultClient {
         userAccount: args.userAccount,
         systemProgram: SystemProgram.programId,
       });
-    if (signer) b = b.signers([signer]);
+    if (signer) b = b.signers(signer ? [signer] : []);
     return b.rpc();
   }
 
@@ -596,7 +596,7 @@ export class SolanaVaultClient {
         userAccount: args.userAccount,
         rentReceiver: args.rentReceiver,
       });
-    if (signer) b = b.signers([signer]);
+    if (signer) b = b.signers(signer ? [signer] : []);
     return b.rpc();
   }
 
@@ -609,7 +609,7 @@ export class SolanaVaultClient {
         globalConfig: args.globalConfig,
         dlmmPosition: args.dlmmPosition,
       });
-    if (signer) b = b.signers([signer]);
+    if (signer) b = b.signers(signer ? [signer] : []);
     return b.rpc();
   }
 
@@ -621,11 +621,11 @@ export class SolanaVaultClient {
         admin: args.admin,
         globalConfig: args.globalConfig,
       });
-    if (signer) b = b.signers([signer]);
+    if (signer) b = b.signers(signer ? [signer] : []);
     return b.rpc();
   }
 
-  async setDevWallet(args: SetDevWalletArgs, signer: anchor.web3.Signer) {
+  async setDevWallet(args: SetDevWalletArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .setDevWallet(args.devIndex, args.newWallet)
@@ -633,11 +633,11 @@ export class SolanaVaultClient {
         devAuthority: args.devAuthority,
         globalConfig: args.globalConfig,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async withdrawDevFees(args: WithdrawDevFeesArgs, signer: anchor.web3.Signer) {
+  async withdrawDevFees(args: WithdrawDevFeesArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .withdrawDevFees(args.devIndex, args.amount)
@@ -648,11 +648,11 @@ export class SolanaVaultClient {
         vaultUsdcAccount: args.vaultUsdcAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async setMarketerWallet(args: SetMarketerWalletArgs, signer: anchor.web3.Signer) {
+  async setMarketerWallet(args: SetMarketerWalletArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .setMarketerWallet(args.newWallet)
@@ -660,11 +660,11 @@ export class SolanaVaultClient {
         marketerAuthority: args.marketerAuthority,
         globalConfig: args.globalConfig,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 
-  async withdrawMarketerFees(args: WithdrawMarketerFeesArgs, signer: anchor.web3.Signer) {
+  async withdrawMarketerFees(args: WithdrawMarketerFeesArgs, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
       .withdrawMarketerFees(args.amount)
@@ -675,7 +675,7 @@ export class SolanaVaultClient {
         vaultUsdcAccount: args.vaultUsdcAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .signers([signer])
+      .signers(signer ? [signer] : [])
       .rpc();
   }
 }
