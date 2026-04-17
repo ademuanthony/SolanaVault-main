@@ -926,6 +926,113 @@ export type SolanaVault = {
       ]
     },
     {
+      "name": "distributeAccruedFees",
+      "docs": [
+        "Permissionless fee sweep: atomically pay out every accrued fee bucket",
+        "(company + 3 devs + marketer1) to their configured wallets and zero",
+        "the counters. Anyone can sign `payer`; `token::authority` constraints",
+        "pin each destination so a caller cannot redirect funds."
+      ],
+      "discriminator": [
+        205,
+        241,
+        193,
+        87,
+        26,
+        33,
+        131,
+        94
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Just pays tx fees / compute. No privilege beyond signing."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "globalConfig",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vaultUsdcAccount",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "globalConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "companyUsdcAccount",
+          "writable": true
+        },
+        {
+          "name": "dev1UsdcAccount",
+          "writable": true
+        },
+        {
+          "name": "dev2UsdcAccount",
+          "writable": true
+        },
+        {
+          "name": "dev3UsdcAccount",
+          "writable": true
+        },
+        {
+          "name": "marketer1UsdcAccount",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "flagUser",
       "docs": [
         "Flag a user account (admin only)"
@@ -2725,6 +2832,16 @@ export type SolanaVault = {
       "code": 6027,
       "name": "slippageExceeded",
       "msg": "Slippage: output less than minimum_amount_out"
+    },
+    {
+      "code": 6028,
+      "name": "nothingToDistribute",
+      "msg": "Nothing to distribute: all fee buckets are zero"
+    },
+    {
+      "code": 6029,
+      "name": "belowMinDistribution",
+      "msg": "Total accrued fees are below the configured minimum distribution amount"
     }
   ],
   "types": [
@@ -3050,6 +3167,22 @@ export type SolanaVault = {
             "type": "u64"
           },
           {
+            "name": "minDistributionAmount",
+            "docs": [
+              "Total accrued-fees threshold below which `distribute_accrued_fees`",
+              "reverts (anti-dust for the permissionless sweep). 0 = disabled."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "lastDistributionAt",
+            "docs": [
+              "Unix timestamp of the most recent successful `distribute_accrued_fees`.",
+              "0 if never. Surface for off-chain monitoring / staleness alerts."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -3344,6 +3477,12 @@ export type SolanaVault = {
           },
           {
             "name": "maxUserShares",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "minDistributionAmount",
             "type": {
               "option": "u64"
             }

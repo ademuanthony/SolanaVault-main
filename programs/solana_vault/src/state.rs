@@ -52,6 +52,13 @@ pub struct GlobalConfig {
     /// Soft cap on per-user shares (0 = disabled). Deposit reverts if exceeded.
     pub max_user_shares: u64,                     // 8
 
+    /// Total accrued-fees threshold below which `distribute_accrued_fees`
+    /// reverts (anti-dust for the permissionless sweep). 0 = disabled.
+    pub min_distribution_amount: u64,             // 8
+    /// Unix timestamp of the most recent successful `distribute_accrued_fees`.
+    /// 0 if never. Surface for off-chain monitoring / staleness alerts.
+    pub last_distribution_at: i64,                // 8
+
     pub bump: u8,                                // 1
 }
 

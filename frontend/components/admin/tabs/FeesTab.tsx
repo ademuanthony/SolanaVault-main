@@ -1,11 +1,11 @@
 'use client';
 
-import { DollarSign, Shield, Building2, Megaphone, Users } from 'lucide-react';
+import { DollarSign, Shield, Building2, Megaphone, Users, Zap, Loader2 } from 'lucide-react';
 import { toast } from "sonner";
 import { useVault } from '@/hooks/useVault';
 
 export function FeesTab({ globalConfig, referralPoolTotal }: { globalConfig: any, referralPoolTotal: number }) {
-    const { withdrawCompanyFees, withdrawDevFees, withdrawMarketerFees, loading } = useVault();
+    const { withdrawCompanyFees, withdrawDevFees, withdrawMarketerFees, distributeAccruedFees, loading } = useVault();
 
     const fees = [
         { name: 'Company Wallet', share: '57%', amount: Number(globalConfig?.companyFees || 0) / 1e6, type: 'company', icon: Building2 },
@@ -15,6 +15,23 @@ export function FeesTab({ globalConfig, referralPoolTotal }: { globalConfig: any
         { name: 'Marketer Wallet 1', share: '3%', amount: Number(globalConfig?.marketer1Fees || 0) / 1e6, type: 'marketer', icon: Megaphone },
         { name: 'Referral Pool', share: '10%', amount: referralPoolTotal || 0, type: 'referral', icon: Users },
     ];
+
+    const sweepable = Number(globalConfig?.companyFees || 0)
+        + Number(globalConfig?.dev1Fees || 0)
+        + Number(globalConfig?.dev2Fees || 0)
+        + Number(globalConfig?.dev3Fees || 0)
+        + Number(globalConfig?.marketer1Fees || 0);
+    const sweepableUsdc = sweepable / 1e6;
+
+    const handleDistributeAll = async () => {
+        try {
+            await distributeAccruedFees();
+            toast.success(`Swept $${sweepableUsdc.toFixed(2)} to all recipient wallets.`);
+        } catch (err: any) {
+            console.error('Distribute all failed:', err);
+            toast.error('Distribute failed: ' + err.message);
+        }
+    };
 
     const handleWithdraw = async (item: any) => {
         try {
@@ -35,11 +52,22 @@ export function FeesTab({ globalConfig, referralPoolTotal }: { globalConfig: any
     return (
         <div className="grid grid-cols-1 gap-8 animate-in fade-in duration-300">
             <div className="bg-card border border-border rounded-3xl p-8 space-y-8 shadow-sm">
-                <div className="flex items-center gap-3">
-                    <div className="bg-primary/10 p-3 rounded-2xl">
-                        <DollarSign className="w-6 h-6 text-primary" />
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-primary/10 p-3 rounded-2xl">
+                            <DollarSign className="w-6 h-6 text-primary" />
+                        </div>
+                        <h3 className="text-xl font-bold italic tracking-tight uppercase">Revenue Streams</h3>
                     </div>
-                    <h3 className="text-xl font-bold italic tracking-tight uppercase">Revenue Streams</h3>
+                    <button
+                        onClick={handleDistributeAll}
+                        disabled={loading || sweepable <= 0}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all disabled:opacity-40"
+                        title="Permissionless: anyone can trigger this. Sweeps all 5 buckets in one tx."
+                    >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                        Distribute All (${sweepableUsdc.toFixed(2)})
+                    </button>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4">

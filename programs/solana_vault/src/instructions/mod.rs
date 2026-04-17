@@ -3,6 +3,7 @@ pub mod register;
 pub mod deposit;
 pub mod withdraw;
 pub mod claim_referral_earnings;
+pub mod distribute_accrued_fees;
 pub mod admin;
 pub mod dev;
 pub mod marketer;
@@ -13,6 +14,7 @@ pub use register::Register;
 pub use deposit::Deposit;
 pub use withdraw::Withdraw;
 pub use claim_referral_earnings::ClaimReferralEarnings;
+pub use distribute_accrued_fees::DistributeAccruedFees;
 pub use admin::{
     WelcomeBonusDeposit,
     SetCompanyWallet,

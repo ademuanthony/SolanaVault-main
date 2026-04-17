@@ -112,6 +112,8 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     global_config.pending_admin = None;
     global_config.max_tvl = 0;
     global_config.max_user_shares = 0;
+    global_config.min_distribution_amount = 0;
+    global_config.last_distribution_at = 0;
 
     global_config.bump = ctx.bumps.global_config;
     

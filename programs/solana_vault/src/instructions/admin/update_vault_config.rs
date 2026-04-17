@@ -27,6 +27,7 @@ pub struct UpdateConfigParams {
     pub paused: Option<bool>,
     pub max_tvl: Option<u64>,
     pub max_user_shares: Option<u64>,
+    pub min_distribution_amount: Option<u64>,
 }
 
 #[derive(Accounts)]
@@ -90,6 +91,7 @@ pub fn handler(ctx: Context<UpdateVaultConfig>, params: UpdateConfigParams) -> R
     if let Some(val) = params.paused { global_config.paused = val; }
     if let Some(val) = params.max_tvl { global_config.max_tvl = val; }
     if let Some(val) = params.max_user_shares { global_config.max_user_shares = val; }
+    if let Some(val) = params.min_distribution_amount { global_config.min_distribution_amount = val; }
 
     msg!("Global configuration updated by admin");
     Ok(())

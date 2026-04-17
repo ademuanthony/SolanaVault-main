@@ -64,6 +64,17 @@ export interface ClaimReferralEarningsArgs {
   vaultUsdcAccount: PublicKey;
 }
 
+export interface DistributeAccruedFeesArgs {
+  payer: PublicKey;
+  globalConfig: PublicKey;
+  vaultUsdcAccount: PublicKey;
+  companyUsdcAccount: PublicKey;
+  dev1UsdcAccount: PublicKey;
+  dev2UsdcAccount: PublicKey;
+  dev3UsdcAccount: PublicKey;
+  marketer1UsdcAccount: PublicKey;
+}
+
 export interface WelcomeBonusDepositArgs {
   admin: PublicKey;
   globalConfig: PublicKey;
@@ -285,6 +296,28 @@ export class SolanaVaultClient {
       .remainingAccounts(remaining)
       .signers([signer])
       .rpc();
+  }
+
+  /// Permissionless sweep of all accrued fee buckets. Any wallet can sign
+  /// `payer`; `token::authority` constraints on each destination prevent
+  /// the caller from redirecting funds.
+  async distributeAccruedFees(args: DistributeAccruedFeesArgs, signer?: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    let builder = methods
+      .distributeAccruedFees()
+      .accounts({
+        payer: args.payer,
+        globalConfig: args.globalConfig,
+        vaultUsdcAccount: args.vaultUsdcAccount,
+        companyUsdcAccount: args.companyUsdcAccount,
+        dev1UsdcAccount: args.dev1UsdcAccount,
+        dev2UsdcAccount: args.dev2UsdcAccount,
+        dev3UsdcAccount: args.dev3UsdcAccount,
+        marketer1UsdcAccount: args.marketer1UsdcAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      });
+    if (signer) builder = builder.signers([signer]);
+    return builder.rpc();
   }
 
   async claimReferralEarnings(args: ClaimReferralEarningsArgs, signer: anchor.web3.Signer) {

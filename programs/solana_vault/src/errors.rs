@@ -87,4 +87,10 @@ pub enum VaultError {
 
     #[msg("Slippage: output less than minimum_amount_out")]
     SlippageExceeded,
+
+    #[msg("Nothing to distribute: all fee buckets are zero")]
+    NothingToDistribute,
+
+    #[msg("Total accrued fees are below the configured minimum distribution amount")]
+    BelowMinDistribution,
 }

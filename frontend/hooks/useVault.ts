@@ -517,6 +517,43 @@ export function useVault() {
         }
     };
 
+    const distributeAccruedFees = async () => {
+        if (!client || !publicKey || !globalConfig) throw new Error('Not initialized');
+        setLoading(true);
+        try {
+            const { globalConfigPda, vaultUsdcPda } = getPDAs();
+            const usdcMint = globalConfig.usdcMint;
+
+            const [companyUsdcAccount, dev1UsdcAccount, dev2UsdcAccount, dev3UsdcAccount, marketer1UsdcAccount] = await Promise.all([
+                getAssociatedTokenAddress(usdcMint, globalConfig.companyWallet),
+                getAssociatedTokenAddress(usdcMint, globalConfig.dev1Wallet),
+                getAssociatedTokenAddress(usdcMint, globalConfig.dev2Wallet),
+                getAssociatedTokenAddress(usdcMint, globalConfig.dev3Wallet),
+                getAssociatedTokenAddress(usdcMint, globalConfig.marketer1Wallet),
+            ]);
+
+            const tx = await client.distributeAccruedFees({
+                payer: publicKey,
+                globalConfig: globalConfigPda,
+                vaultUsdcAccount: vaultUsdcPda,
+                companyUsdcAccount,
+                dev1UsdcAccount,
+                dev2UsdcAccount,
+                dev3UsdcAccount,
+                marketer1UsdcAccount,
+            });
+
+            console.log('Distribute accrued fees success:', tx);
+            await fetchState();
+            return tx;
+        } catch (error) {
+            console.error('Distribute accrued fees failed:', error);
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const withdrawCompanyFees = async (amount: number) => {
         if (!client || !publicKey || !globalConfig) throw new Error('Not initialized');
         setLoading(true);
@@ -1705,6 +1742,7 @@ export function useVault() {
         withdrawCompanyFees,
         withdrawDevFees,
         withdrawMarketerFees,
+        distributeAccruedFees,
         syncTvl,
         jupiter_swap: jupiterSwap,
         openDlmmPosition,

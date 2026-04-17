@@ -15,6 +15,7 @@ use instructions::{
     deposit::*,
     withdraw::*,
     claim_referral_earnings::*,
+    distribute_accrued_fees::*,
     // Admin instructions
     admin::{
         welcome_bonus_deposit::*,
@@ -78,6 +79,14 @@ pub mod solana_vault {
     /// Claim accumulated referral earnings
     pub fn claim_referral_earnings(ctx: Context<ClaimReferralEarnings>) -> Result<()> {
         instructions::claim_referral_earnings::handler(ctx)
+    }
+
+    /// Permissionless fee sweep: atomically pay out every accrued fee bucket
+    /// (company + 3 devs + marketer1) to their configured wallets and zero
+    /// the counters. Anyone can sign `payer`; `token::authority` constraints
+    /// pin each destination so a caller cannot redirect funds.
+    pub fn distribute_accrued_fees(ctx: Context<DistributeAccruedFees>) -> Result<()> {
+        instructions::distribute_accrued_fees::handler(ctx)
     }
 
     // Admin instructions
