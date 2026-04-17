@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor';
 import { PublicKey, SystemProgram, Keypair, Transaction, TransactionInstruction, TransactionMessage, VersionedTransaction, AddressLookupTableProgram, ComputeBudgetProgram } from '@solana/web3.js';
-import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, MINT_SIZE, createInitializeMintInstruction, getMinimumBalanceForRentExemptMint, getAccount } from '@solana/spl-token';
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, MINT_SIZE, createInitializeMintInstruction, getMinimumBalanceForRentExemptMint, getAccount, createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
 import { SolanaVaultClient } from '@/sdk/vault';
 import { buildJupiterCpi } from '@/sdk/jupiter';
 import { buildOpenPositionCpi, buildClosePositionCpi, buildClaimSwapFeeCpi, toDlmmCpiData } from '@/sdk/meteora_dlmm';
@@ -13,7 +13,7 @@ import { SolanaVault } from '../target/types/solana_vault';
 import IDL from '../target/types/solana_vault.json';
 
 export const PROGRAM_ID = new PublicKey(
-    process.env.NEXT_PUBLIC_PROGRAM_ID || 'EA6Sz3Q7CuoyJSzmDD3QUf5KXRrqHZ4QbxkmyrZfUNBi'
+    process.env.NEXT_PUBLIC_PROGRAM_ID || '3TV5FTYziezR5xrp9SAeR6zLU4brnTLQuegjixpBrV1t'
 );
 const JUPITER_PROGRAM_ID = new PublicKey('JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4');
 
@@ -442,7 +442,7 @@ export function useVault() {
     };
 
     const welcomeBonusDeposit = async (user: string) => {
-        if (!client || !publicKey || !globalConfig) throw new Error('Not initialized');
+        if (!client || !publicKey || !globalConfig || !signTransaction) throw new Error('Not initialized');
         setLoading(true);
         try {
             const { globalConfigPda, vaultStatePda, vaultUsdcPda } = getPDAs();
@@ -460,6 +460,34 @@ export function useVault() {
             const dev1UsdcAccount = await getAssociatedTokenAddress(usdcMint, globalConfig.dev1Wallet);
             const dev2UsdcAccount = await getAssociatedTokenAddress(usdcMint, globalConfig.dev2Wallet);
             const dev3UsdcAccount = await getAssociatedTokenAddress(usdcMint, globalConfig.dev3Wallet);
+
+            // The on-chain handler calls `mint_to` / `transfer` into these ATAs directly
+            // (no init), so any that don't exist yet must be created first or the tx
+            // reverts in simulation.
+            const ataPrereqs: { ata: PublicKey; owner: PublicKey; mint: PublicKey }[] = [
+                { ata: userShareAccount, owner: userPubkey, mint: shareMint },
+                { ata: dev1UsdcAccount, owner: globalConfig.dev1Wallet, mint: usdcMint },
+                { ata: dev2UsdcAccount, owner: globalConfig.dev2Wallet, mint: usdcMint },
+                { ata: dev3UsdcAccount, owner: globalConfig.dev3Wallet, mint: usdcMint },
+            ];
+            const ataInfos = await connection.getMultipleAccountsInfo(ataPrereqs.map((p) => p.ata));
+            const ataIxs: TransactionInstruction[] = [];
+            ataInfos.forEach((info, i) => {
+                if (!info) {
+                    const p = ataPrereqs[i];
+                    ataIxs.push(createAssociatedTokenAccountIdempotentInstruction(publicKey, p.ata, p.owner, p.mint));
+                }
+            });
+            if (ataIxs.length > 0) {
+                console.log(`Creating ${ataIxs.length} missing ATA(s) for welcome bonus...`);
+                const bh = await connection.getLatestBlockhash();
+                const msg = new TransactionMessage({ payerKey: publicKey, recentBlockhash: bh.blockhash, instructions: ataIxs }).compileToV0Message();
+                let prepTx = new VersionedTransaction(msg);
+                prepTx = await signTransaction(prepTx) as any;
+                const prepSig = await connection.sendRawTransaction(prepTx.serialize());
+                await connection.confirmTransaction({ signature: prepSig, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight });
+                console.log(`ATA prep tx: ${prepSig}`);
+            }
 
             const tx = await client.welcomeBonusDeposit({
                 admin: publicKey,
@@ -1180,12 +1208,19 @@ export function useVault() {
         if (!publicKey || !signTransaction) throw new Error('Wallet not connected');
         const DLMM_PROGRAM_ID = new PublicKey('LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo');
 
-        // Build CPI accounts with optional swaps
+        // Build CPI accounts with optional swaps.
+        // Also auto-redirect `globalConfigPda` → admin on non-signer, writable slots
+        // (Meteora's rent-receiver / fund-sink fields default to the position owner,
+        // which is globalConfigPda; that PDA has no wallet-level spendable balance,
+        // so rent must be redirected to admin on close).
         const cpiAccounts = meteoraIx.keys.map((k: any) => {
             let pubkey = k.pubkey;
             if (accountSwaps) {
                 const swap = accountSwaps.get(pubkey.toBase58());
                 if (swap) pubkey = swap;
+            }
+            if (!k.isSigner && k.isWritable && pubkey.equals(globalConfigPda)) {
+                pubkey = publicKey;
             }
             return { pubkey, isSigner: k.isSigner, isWritable: k.isWritable };
         });
@@ -1197,9 +1232,13 @@ export function useVault() {
         // Manually encode claimDlmmFees instruction
         const discriminator = Buffer.from([102, 188, 67, 120, 236, 199, 117, 122]);
         const claimedAmountBuf = Buffer.alloc(8);
-        // Write claimed_amount as u64 little-endian
+        // Write claimed_amount as u64 little-endian. Avoid Buffer.writeBigUInt64LE —
+        // not all browser Buffer polyfills implement the BigInt methods.
+        const MASK32 = BigInt("0xffffffff");
+        const SHIFT32 = BigInt(32);
         const claimedBigInt = BigInt(Math.floor(claimedAmount));
-        claimedAmountBuf.writeBigUInt64LE(claimedBigInt);
+        claimedAmountBuf.writeUInt32LE(Number(claimedBigInt & MASK32), 0);
+        claimedAmountBuf.writeUInt32LE(Number((claimedBigInt >> SHIFT32) & MASK32), 4);
         const accountsLenBuf = Buffer.alloc(4);
         accountsLenBuf.writeUInt32LE(cpiAccounts.length);
         const accountsBufs = cpiAccounts.map((a: any) => {
@@ -1328,7 +1367,10 @@ export function useVault() {
                     await sendMeteoraCpiWithAlt(meteoraCloseIx, dlmmPositionPda, globalConfigPda, vaultStatePda);
                 }
             } catch (e: any) {
-                console.warn("Meteora position cleanup:", e.message);
+                throw new Error(
+                    `Meteora position cleanup failed — tracking PDA NOT closed so you can retry. ` +
+                    `Underlying error: ${e.message}`
+                );
             }
 
             // Step 2: Close our program's DlmmPosition tracking account

@@ -15,7 +15,7 @@ import * as path from "path";
 // CONFIGURATION — Edit these values before running
 // ============================================================
 
-const PROGRAM_ID = new PublicKey("EA6Sz3Q7CuoyJSzmDD3QUf5KXRrqHZ4QbxkmyrZfUNBi");
+const PROGRAM_ID = new PublicKey("3TV5FTYziezR5xrp9SAeR6zLU4brnTLQuegjixpBrV1t");
 
 // Devnet USDC mint (Circle's devnet USDC — use your own if you created a custom one)
 const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");

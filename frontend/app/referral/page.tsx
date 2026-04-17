@@ -14,7 +14,7 @@ import { useVault } from '@/hooks/useVault';
 export default function ReferralPage() {
     const { connection } = useConnection();
     const { connected, publicKey } = useWallet();
-    const { userAccount, referrals, claimReferralEarnings, register, loading, isInitialized, refresh, globalConfig } = useVault();
+    const { userAccount, referrals, claimReferralEarnings, loading, isInitialized, refresh, globalConfig } = useVault();
     const [copied, setCopied] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -39,15 +39,6 @@ export default function ReferralPage() {
             await claimReferralEarnings();
         } catch (err: any) {
             setError(err.message || 'Claim failed');
-        }
-    };
-
-    const handleRegister = async () => {
-        setError(null);
-        try {
-            await register();
-        } catch (err: any) {
-            setError(err.message || 'Registration failed');
         }
     };
 
@@ -97,21 +88,14 @@ export default function ReferralPage() {
     if (!userAccount) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 text-center px-4">
-                <div className="rounded-full bg-primary/10 p-6">
-                    <Users className="h-12 w-12 text-primary" />
+                <div className="rounded-full bg-red-500/10 p-6">
+                    <Users className="h-12 w-12 text-red-400" />
                 </div>
-                <h1 className="text-3xl font-bold">Register to Earn</h1>
+                <h1 className="text-3xl font-bold">Access Restricted</h1>
                 <p className="text-muted-foreground max-w-md">
-                    You need to register your account on-chain to generate a referral link and start earning rewards.
+                    This wallet is not registered. Account registration is managed by the admin —
+                    please contact the admin to be whitelisted before you can access referrals or earnings.
                 </p>
-                <button
-                    onClick={handleRegister}
-                    disabled={loading}
-                    className="inline-flex items-center justify-center rounded-lg bg-primary px-8 py-3 text-sm font-bold text-primary-foreground shadow transition-colors hover:bg-primary/90"
-                >
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Register Now
-                </button>
             </div>
         );
     }

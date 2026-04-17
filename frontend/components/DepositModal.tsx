@@ -11,20 +11,17 @@ interface DepositModalProps {
 }
 
 export function DepositModal({ isOpen, onClose }: DepositModalProps) {
-    const { userAccount, vaultState, deposit, register, loading } = useVault();
+    const { userAccount, vaultState, deposit, loading } = useVault();
     const [amount, setAmount] = useState('');
     const [error, setError] = useState<string | null>(null);
 
     const handleAction = async () => {
         setError(null);
         try {
-            if (!userAccount) {
-                await register();
-            } else {
-                if (!amount || isNaN(Number(amount))) return;
-                await deposit(Number(amount));
-                onClose();
-            }
+            if (!userAccount) return;
+            if (!amount || isNaN(Number(amount))) return;
+            await deposit(Number(amount));
+            onClose();
         } catch (err: any) {
             setError(err.message || 'Transaction failed');
         }
@@ -36,16 +33,16 @@ export function DepositModal({ isOpen, onClose }: DepositModalProps) {
     const sharesReceived = amount ? Number(amount) / sharePrice : 0;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={userAccount ? "Deposit USDC" : "Register Account"}>
+        <Modal isOpen={isOpen} onClose={onClose} title={userAccount ? "Deposit USDC" : "Access Restricted"}>
             <div className="space-y-6">
                 {!userAccount ? (
                     <div className="text-center space-y-4 py-4">
-                        <div className="rounded-full bg-primary/10 w-16 h-16 flex items-center justify-center mx-auto">
-                            <Wallet className="h-8 w-8 text-primary" />
+                        <div className="rounded-full bg-red-500/10 w-16 h-16 flex items-center justify-center mx-auto">
+                            <Wallet className="h-8 w-8 text-red-400" />
                         </div>
                         <p className="text-sm text-muted-foreground">
-                            You need to register your account on-chain before you can deposit.
-                            This is a one-time setup fee.
+                            This wallet is not registered. Account registration is managed by the admin —
+                            please contact the admin to be whitelisted before you can deposit.
                         </p>
                     </div>
                 ) : (
@@ -83,17 +80,19 @@ export function DepositModal({ isOpen, onClose }: DepositModalProps) {
                     </div>
                 </div>
 
-                <button
-                    onClick={handleAction}
-                    disabled={loading || (userAccount && !amount)}
-                    className="w-full inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                >
-                    {loading ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    {userAccount ? "Confirm Deposit" : "Register Now"}
-                    {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
-                </button>
+                {userAccount && (
+                    <button
+                        onClick={handleAction}
+                        disabled={loading || !amount}
+                        className="w-full inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                    >
+                        {loading ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : null}
+                        Confirm Deposit
+                        {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
+                    </button>
+                )}
             </div>
         </Modal>
     );
