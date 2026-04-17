@@ -1,13 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { DollarSign, Shield, Loader2, RefreshCw, ArrowRight, Building2, User, Megaphone, Users } from 'lucide-react';
+import { DollarSign, Shield, Building2, Megaphone, Users } from 'lucide-react';
 import { toast } from "sonner";
 import { useVault } from '@/hooks/useVault';
-import { InputField } from '@/components/admin/InputField';
 
 export function FeesTab({ globalConfig, referralPoolTotal }: { globalConfig: any, referralPoolTotal: number }) {
-    const { withdrawCompanyFees, withdrawDevFees, withdrawMarketerFees, simulateYield, loading } = useVault();
+    const { withdrawCompanyFees, withdrawDevFees, withdrawMarketerFees, loading } = useVault();
 
     const fees = [
         { name: 'Company Wallet', share: '57%', amount: Number(globalConfig?.companyFees || 0) / 1e6, type: 'company', icon: Building2 },
@@ -35,7 +33,7 @@ export function FeesTab({ globalConfig, referralPoolTotal }: { globalConfig: any
     };
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in duration-300">
+        <div className="grid grid-cols-1 gap-8 animate-in fade-in duration-300">
             <div className="bg-card border border-border rounded-3xl p-8 space-y-8 shadow-sm">
                 <div className="flex items-center gap-3">
                     <div className="bg-primary/10 p-3 rounded-2xl">
@@ -73,59 +71,6 @@ export function FeesTab({ globalConfig, referralPoolTotal }: { globalConfig: any
                     })}
                 </div>
             </div>
-
-            <div className="bg-card border border-border rounded-3xl p-8 space-y-8 shadow-sm relative overflow-hidden">
-                <div className="absolute -right-8 -bottom-8 opacity-[0.02]">
-                    <RefreshCw className="w-64 h-64 rotate-12" />
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <div className="bg-amber-500/10 p-3 rounded-2xl">
-                        <RefreshCw className="w-6osh h-6 text-amber-500" />
-                    </div>
-                    <h3 className="text-xl font-bold italic tracking-tight uppercase">Yield Simulation</h3>
-                </div>
-
-                <div className="bg-amber-500/5 border border-amber-500/10 p-4 rounded-2xl text-[11px] text-amber-600 leading-relaxed font-medium">
-                    This tool allows administrators to simulate profit by injecting USDC value into the vault\'s TVL calculation. This triggers performance fees for testing distribution logic and frontend updates without actual DLMM growth.
-                </div>
-
-                <form
-                    onSubmit={async (e) => {
-                        e.preventDefault();
-                        const formData = new FormData(e.currentTarget);
-                        const amount = Number(formData.get('amount'));
-                        if (amount > 0) {
-                            try {
-                                await simulateYield(amount);
-                                toast.success('Yield simulation successful!');
-                            } catch (err: any) {
-                                console.error('Yield simulation failed:', err);
-                                toast.error('Yield simulation failed: ' + err.message);
-                            }
-                        }
-                    }}
-                    className="space-y-6"
-                >
-                    <InputField label="Amount to Add (USDC)" name="amount" defaultValue="1000" />
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-foreground text-background py-4 rounded-2xl font-black uppercase tracking-widest hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-lg active:scale-[0.98]"
-                    >
-                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlayIcon className="w-5 h-5" />}
-                        Apply Simulated Growth
-                    </button>
-                </form>
-            </div>
         </div>
-    );
-}
-
-function PlayIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
-            <path d="M8 5v14l11-7z" />
-        </svg>
     );
 }

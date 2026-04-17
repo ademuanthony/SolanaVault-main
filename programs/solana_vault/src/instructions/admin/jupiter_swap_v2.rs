@@ -61,6 +61,7 @@ pub fn handler<'info>(
     ctx: Context<'_, '_, '_, 'info, JupiterSwapV2<'info>>,
     swap_data: Vec<u8>,
     swap_amount: u64,
+    minimum_amount_out: u64,
 ) -> Result<()> {
     require!(!swap_data.is_empty(), VaultError::InvalidDepositAmount);
     require!(swap_amount > 0, VaultError::InvalidDepositAmount);
@@ -100,6 +101,11 @@ pub fn handler<'info>(
         )?;
     }
 
+    // Snapshot destination ATA pre-swap so we can measure the delta (High #5).
+    // Using the post-transfer balance covers self-swap / same-ATA edge cases.
+    ctx.accounts.jupiter_destination_ata.reload()?;
+    let pre_destination = ctx.accounts.jupiter_destination_ata.amount;
+
     // Step 2: CPI into Jupiter
     // Explicitly control signer status: only the GlobalConfig PDA should be a signer.
     // Do NOT copy ai.is_signer — it may have been mutated by the prior token::transfer CPI.
@@ -128,9 +134,16 @@ pub fn handler<'info>(
     invoke_signed(&ix, &account_infos, signer_seeds)?;
 
     // Step 3: Transfer output tokens from PDA's standard destination ATA → vault destination
-    // (Only if they are different accounts)
+    // (Only if they are different accounts). Compute delta, not total balance,
+    // so leftover dust from a prior swap isn't charged as "output" (High #5).
     ctx.accounts.jupiter_destination_ata.reload()?;
-    let output_amount = ctx.accounts.jupiter_destination_ata.amount;
+    let post_destination = ctx.accounts.jupiter_destination_ata.amount;
+    let output_amount = post_destination.saturating_sub(pre_destination);
+
+    require!(
+        output_amount >= minimum_amount_out,
+        VaultError::SlippageExceeded
+    );
 
     if ctx.accounts.destination_token_account.key() != ctx.accounts.jupiter_destination_ata.key()
         && output_amount > 0

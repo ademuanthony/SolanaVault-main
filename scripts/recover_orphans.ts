@@ -11,7 +11,7 @@ import {
   ComputeBudgetProgram,
   AddressLookupTableProgram,
 } from "@solana/web3.js";
-import { getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } from "@solana/spl-token";
 import DLMM from "@meteora-ag/dlmm";
 import BN from "bn.js";
 import * as fs from "fs";
@@ -75,10 +75,8 @@ function applySwaps(keys: { pubkey: PublicKey; isSigner: boolean; isWritable: bo
 function encodeClaimFeesData(
   cpiAccounts: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[],
   cpiData: Buffer,
-  claimedAmount: bigint,
 ): Buffer {
-  const claimedBuf = Buffer.alloc(8);
-  claimedBuf.writeBigUInt64LE(claimedAmount);
+  // claim_dlmm_fees signature after audit fix: (cpi_data: DlmmCpiData) — no claimed_amount.
   const lenBuf = Buffer.alloc(4);
   lenBuf.writeUInt32LE(cpiAccounts.length);
   const accountBufs = cpiAccounts.map((a) => {
@@ -90,7 +88,7 @@ function encodeClaimFeesData(
   });
   const dataLen = Buffer.alloc(4);
   dataLen.writeUInt32LE(cpiData.length);
-  return Buffer.concat([CLAIM_FEES_DISCRIMINATOR, claimedBuf, lenBuf, ...accountBufs, dataLen, cpiData]);
+  return Buffer.concat([CLAIM_FEES_DISCRIMINATOR, lenBuf, ...accountBufs, dataLen, cpiData]);
 }
 
 async function getOrCreateAlt(
@@ -272,7 +270,7 @@ async function main() {
       } else {
         console.log(`  [ix ${i + 1}/${dlmmIxs.length}] via claimDlmmFees`);
         await forwardViaClaimFees({
-          connection, admin, globalConfigPda, vaultStatePda, scratchPda, swappedKeys, cpiData,
+          connection, admin, globalConfigPda, scratchPda, swappedKeys, cpiData,
         });
       }
     }
@@ -340,6 +338,11 @@ async function forwardViaOpenPosition(args: {
     isWritable: k.isWritable,
   }));
 
+  const [vaultUsdcPdaForOpen] = PublicKey.findProgramAddressSync(
+    [Buffer.from("vault_usdc"), globalConfigPda.toBuffer()],
+    PROGRAM_ID,
+  );
+
   const ix = await program.methods
     .openDlmmPosition(params, initCpiData)
     .accounts({
@@ -347,7 +350,9 @@ async function forwardViaOpenPosition(args: {
       globalConfig: globalConfigPda,
       dlmmPosition: scratchPda,
       vaultState: vaultStatePda,
+      vaultUsdcAccount: vaultUsdcPdaForOpen,
       dlmmProgram: DLMM_PROGRAM_ID,
+      tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
     .remainingAccounts(remaining)
@@ -363,14 +368,13 @@ async function forwardViaClaimFees(args: {
   connection: Connection;
   admin: Keypair;
   globalConfigPda: PublicKey;
-  vaultStatePda: PublicKey;
   scratchPda: PublicKey;
   swappedKeys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[];
   cpiData: Buffer;
 }) {
-  const { connection, admin, globalConfigPda, vaultStatePda, scratchPda, swappedKeys, cpiData } = args;
+  const { connection, admin, globalConfigPda, scratchPda, swappedKeys, cpiData } = args;
 
-  const data = encodeClaimFeesData(swappedKeys, cpiData, 0n);
+  const data = encodeClaimFeesData(swappedKeys, cpiData);
   const remaining = swappedKeys.map((k) => ({
     pubkey: k.pubkey,
     isSigner: k.pubkey.equals(admin.publicKey),
@@ -383,7 +387,6 @@ async function forwardViaClaimFees(args: {
       { pubkey: admin.publicKey, isSigner: true, isWritable: true },
       { pubkey: globalConfigPda, isSigner: false, isWritable: true },
       { pubkey: scratchPda, isSigner: false, isWritable: true },
-      { pubkey: vaultStatePda, isSigner: false, isWritable: true },
       { pubkey: DLMM_PROGRAM_ID, isSigner: false, isWritable: false },
       ...remaining,
     ],

@@ -40,7 +40,9 @@ pub fn handler(ctx: Context<Register>, referrer: Option<Pubkey>) -> Result<()> {
     user_account.wallet = ctx.accounts.user.key();
     user_account.referrer = referrer;
     user_account.shares = 0;
-    user_account.entry_price = 1_000_000; // 1.0 scaled by 1e6
+    // entry_price is overwritten on first deposit; initialize to 0 so we
+    // never silently use a stale value from registration.
+    user_account.entry_price = 0;
     user_account.unclaimed_referral_earnings = 0;
     user_account.total_referral_earnings = 0;
     user_account.is_flagged = false;

@@ -1,6 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, MintTo, Token, Transfer};
-
+use anchor_spl::token::{self, Mint, MintTo, Token, TokenAccount, Transfer};
 
 use crate::errors::VaultError;
 use crate::state::{GlobalConfig, UserAccount, VaultState};
@@ -52,7 +51,7 @@ pub struct WelcomeBonusDeposit<'info> {
 /// 4. dev2_usdc_account (TokenAccount, writable)
 /// 5. dev3_usdc_account (TokenAccount, writable)
 pub fn handler<'info>(
-    ctx: Context<'_, '_, '_, 'info, WelcomeBonusDeposit<'info>>,
+    ctx: Context<'_, '_, 'info, 'info, WelcomeBonusDeposit<'info>>,
 ) -> Result<()> {
 
     require!(
@@ -60,21 +59,54 @@ pub fn handler<'info>(
         VaultError::InvalidRemainingAccounts
     );
 
-    let admin_usdc_ai = ctx.remaining_accounts[0].clone();
-    let vault_usdc_ai = ctx.remaining_accounts[1].clone();
-    let user_share_ai = ctx.remaining_accounts[2].clone();
-    let dev1_usdc_ai = ctx.remaining_accounts[3].clone();
-    let dev2_usdc_ai = ctx.remaining_accounts[4].clone();
-    let dev3_usdc_ai = ctx.remaining_accounts[5].clone();
+    let admin_usdc_ai = &ctx.remaining_accounts[0];
+    let vault_usdc_ai = &ctx.remaining_accounts[1];
+    let user_share_ai = &ctx.remaining_accounts[2];
+    let dev1_usdc_ai = &ctx.remaining_accounts[3];
+    let dev2_usdc_ai = &ctx.remaining_accounts[4];
+    let dev3_usdc_ai = &ctx.remaining_accounts[5];
 
+    // Defense-in-depth validation (High #3 / Critical #1).
+    let usdc_mint = ctx.accounts.global_config.usdc_mint;
+    let share_mint_pk = ctx.accounts.share_mint.key();
+    let vault_usdc_expected = ctx.accounts.global_config.vault_usdc_account;
 
-    // // Light validation (ensures these are SPL Token accounts)
-    // let _admin_usdc: Account<TokenAccount> = Account::try_from(&admin_usdc_ai)?;
-    // let _vault_usdc: Account<TokenAccount> = Account::try_from(&vault_usdc_ai)?;
-    // let _user_share: Account<TokenAccount> = Account::try_from(&user_share_ai)?;
-    // let _dev1_usdc: Account<TokenAccount> = Account::try_from(&dev1_usdc_ai)?;
-    // let _dev2_usdc: Account<TokenAccount> = Account::try_from(&dev2_usdc_ai)?;
-    // let _dev3_usdc: Account<TokenAccount> = Account::try_from(&dev3_usdc_ai)?;
+    // admin_usdc: must be USDC mint AND owned by admin signer
+    {
+        let admin_usdc: Account<TokenAccount> = Account::try_from(admin_usdc_ai)?;
+        require!(admin_usdc.mint == usdc_mint, VaultError::InvalidRemainingAccounts);
+        require!(
+            admin_usdc.owner == ctx.accounts.admin.key(),
+            VaultError::InvalidRemainingAccounts
+        );
+    }
+    // vault_usdc: must be the canonical vault USDC account
+    require!(
+        vault_usdc_ai.key() == vault_usdc_expected,
+        VaultError::InvalidRemainingAccounts
+    );
+    // user_share: must match share mint AND be owned by user wallet
+    {
+        let user_share: Account<TokenAccount> = Account::try_from(user_share_ai)?;
+        require!(user_share.mint == share_mint_pk, VaultError::InvalidRemainingAccounts);
+        require!(
+            user_share.owner == ctx.accounts.user.key(),
+            VaultError::InvalidRemainingAccounts
+        );
+    }
+    // dev USDC accounts: USDC mint AND owned by the respective dev wallet
+    let dev1_wallet = ctx.accounts.global_config.dev1_wallet;
+    let dev2_wallet = ctx.accounts.global_config.dev2_wallet;
+    let dev3_wallet = ctx.accounts.global_config.dev3_wallet;
+    for (ai, expected_owner) in [
+        (dev1_usdc_ai, dev1_wallet),
+        (dev2_usdc_ai, dev2_wallet),
+        (dev3_usdc_ai, dev3_wallet),
+    ] {
+        let ta: Account<TokenAccount> = Account::try_from(ai)?;
+        require!(ta.mint == usdc_mint, VaultError::InvalidRemainingAccounts);
+        require!(ta.owner == expected_owner, VaultError::InvalidRemainingAccounts);
+    }
 
     // PDA signer seeds (global_config is authority)
     let global_config_bump = ctx.accounts.global_config.bump;

@@ -31,24 +31,34 @@ pub struct Withdraw<'info> {
     )]
     pub vault_state: Account<'info, VaultState>,
 
-    #[account(mut)]
-    pub user_usdc_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        token::mint = global_config.usdc_mint,
+        token::authority = user,
+    )]
+    pub user_usdc_account: Box<Account<'info, TokenAccount>>,
 
     #[account(
         mut,
+        address = global_config.vault_usdc_account,
+        token::mint = global_config.usdc_mint,
         seeds = [b"vault_usdc", global_config.key().as_ref()],
         bump
     )]
-    pub vault_usdc_account: Account<'info, TokenAccount>,
+    pub vault_usdc_account: Box<Account<'info, TokenAccount>>,
 
-    #[account(mut)]
-    pub user_share_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        token::mint = global_config.share_mint,
+        token::authority = user,
+    )]
+    pub user_share_account: Box<Account<'info, TokenAccount>>,
 
     #[account(
         mut,
         address = global_config.share_mint
     )]
-    pub share_mint: Account<'info, Mint>,
+    pub share_mint: Box<Account<'info, Mint>>,
 
     // /// CHECK: Optional referral account for level 1 (must match user_account.referrer)
     // pub referrer_l1: Option<AccountInfo<'info>>,
@@ -74,6 +84,7 @@ pub fn handler<'info>(
     shares: u64,
 ) -> Result<()> {
     require!(shares > 0, VaultError::InvalidShareAmount);
+    require!(!ctx.accounts.global_config.paused, VaultError::VaultPaused);
 
     let referrer = ctx.accounts.user_account.referrer;
 
@@ -235,47 +246,41 @@ fn distribute_fees<'info>(
     total_fee: u64,
     first_referrer: Option<Pubkey>,
 ) -> Result<()> {
-    // Calculate distribution amounts
-    let company_amount = total_fee
-        .checked_mul(global_config.company_share as u64)
-        .ok_or(VaultError::MathOverflow)?
-        .checked_div(100)
-        .ok_or(VaultError::MathOverflow)?;
+    // Per-bucket shares computed with u128 intermediates to keep fee math
+    // overflow-safe even at extreme sizes (Medium #2).
+    let split = |share: u8| -> Result<u64> {
+        let val = (total_fee as u128)
+            .checked_mul(share as u128)
+            .ok_or(VaultError::MathOverflow)?
+            .checked_div(100)
+            .ok_or(VaultError::MathOverflow)?;
+        require!(val <= u64::MAX as u128, VaultError::MathOverflow);
+        Ok(val as u64)
+    };
 
-    let dev1_amount = total_fee
-        .checked_mul(global_config.dev1_share as u64)
-        .ok_or(VaultError::MathOverflow)?
-        .checked_div(100)
-        .ok_or(VaultError::MathOverflow)?;
+    let company_amount = split(global_config.company_share)?;
+    let dev1_amount = split(global_config.dev1_share)?;
+    let dev2_amount = split(global_config.dev2_share)?;
+    let dev3_amount = split(global_config.dev3_share)?;
+    let marketer1_amount = split(global_config.marketer1_share)?;
+    let referral_pool_amount = split(global_config.referral_pool_share)?;
 
-    let dev2_amount = total_fee
-        .checked_mul(global_config.dev2_share as u64)
-        .ok_or(VaultError::MathOverflow)?
-        .checked_div(100)
-        .ok_or(VaultError::MathOverflow)?;
+    // Absorb any truncation dust into the company bucket so the sum of
+    // buckets always reconciles with `total_fee` (Medium #3).
+    let distributed = company_amount
+        .checked_add(dev1_amount).ok_or(VaultError::MathOverflow)?
+        .checked_add(dev2_amount).ok_or(VaultError::MathOverflow)?
+        .checked_add(dev3_amount).ok_or(VaultError::MathOverflow)?
+        .checked_add(marketer1_amount).ok_or(VaultError::MathOverflow)?
+        .checked_add(referral_pool_amount).ok_or(VaultError::MathOverflow)?;
+    let dust = total_fee.saturating_sub(distributed);
 
-    let dev3_amount = total_fee
-        .checked_mul(global_config.dev3_share as u64)
-        .ok_or(VaultError::MathOverflow)?
-        .checked_div(100)
-        .ok_or(VaultError::MathOverflow)?;
-
-    let marketer1_amount = total_fee
-        .checked_mul(global_config.marketer1_share as u64)
-        .ok_or(VaultError::MathOverflow)?
-        .checked_div(100)
-        .ok_or(VaultError::MathOverflow)?;
-
-    let referral_pool_amount = total_fee
-        .checked_mul(global_config.referral_pool_share as u64)
-        .ok_or(VaultError::MathOverflow)?
-        .checked_div(100)
-        .ok_or(VaultError::MathOverflow)?;
-
-    // Update company fees
+    // Update company fees (incl. dust)
     global_config.company_fees = global_config
         .company_fees
         .checked_add(company_amount)
+        .ok_or(VaultError::MathOverflow)?
+        .checked_add(dust)
         .ok_or(VaultError::MathOverflow)?;
 
     // Update dev fees

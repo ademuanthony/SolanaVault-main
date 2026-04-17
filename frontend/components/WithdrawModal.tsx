@@ -16,7 +16,7 @@ export function WithdrawModal({ isOpen, onClose }: WithdrawModalProps) {
     const [closeAfterWithdraw, setCloseAfterWithdraw] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Refresh vault state when modal opens so we have latest data (e.g. after simulate_yield)
+    // Refresh vault state when modal opens so we have latest on-chain data
     useEffect(() => {
         if (isOpen) refresh();
     }, [isOpen, refresh]);
@@ -85,7 +85,6 @@ export function WithdrawModal({ isOpen, onClose }: WithdrawModalProps) {
     const feeAmount = profitSigned > 0 ? profitSigned * feeTierPercent : 0;
     const netReceive = currentValue - feeAmount;
 
-    // Note: Profit/fee are $0 when share price hasn't increased (no yield). Run simulate_yield (admin) to test.
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Withdraw Funds">

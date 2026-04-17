@@ -42,7 +42,16 @@ pub struct GlobalConfig {
     
     pub welcome_bonus_user: u64,                  // 8
     pub welcome_bonus_dev: u64,                   // 8
-    
+
+    /// Emergency pause flag — gates deposit / withdraw / claim_referral_earnings.
+    pub paused: bool,                             // 1
+    /// Two-step admin rotation: proposed next admin. Cleared on accept.
+    pub pending_admin: Option<Pubkey>,            // 1 + 32
+    /// Soft cap on global TVL (0 = disabled). Deposit reverts if exceeded.
+    pub max_tvl: u64,                             // 8
+    /// Soft cap on per-user shares (0 = disabled). Deposit reverts if exceeded.
+    pub max_user_shares: u64,                     // 8
+
     pub bump: u8,                                // 1
 }
 
@@ -52,7 +61,7 @@ pub struct UserAccount {
     pub wallet: Pubkey,                          // 32
     pub referrer: Option<Pubkey>,                // 1 + 32
     pub shares: u64,                             // 8
-    pub entry_price: u64,                        // 8 (share price when user deposited, scaled by 1e9)
+    pub entry_price: u64,                        // 8 (share price when user deposited — 1e6 scale; see `calculate_share_price`)
     pub unclaimed_referral_earnings: u64,        // 8
     pub total_referral_earnings: u64,            // 8
     pub is_flagged: bool,                        // 1 (admin can flag suspicious accounts)
@@ -147,11 +156,16 @@ impl UserAccount {
 impl VaultState {
     pub const SEED: &'static [u8] = b"vault_state";
     
-    /// Calculate share price (scaled by 1e9)
-    /// share_price = (total_tvl * 1e9) / total_shares
+    /// Calculate share price.
+    ///
+    /// Scale convention: `share_price = total_tvl_raw * 1e9 / total_shares_raw`.
+    /// Since USDC has 6 decimals and shares have 9, at parity (1 share = 1 USDC)
+    /// this evaluates to `1_000_000`. So callers must treat the returned value
+    /// as "USDC-per-share scaled by 1e6" and pair it with the companion math
+    /// in `deposit`, `withdraw`, `welcome_bonus_deposit`, and `shares_to_usdc`.
     pub fn calculate_share_price(&self) -> Result<u64> {
         if self.total_shares == 0 {
-            return Ok(1_000_000); // 1.0 scaled by 1e6 (since 1 Share = 1 USDC)
+            return Ok(1_000_000); // 1.0 at the 1e6 scale described above
         }
         let tvl_scaled = self.total_tvl.checked_mul(1_000_000_000).ok_or(VaultError::MathOverflow)?;
         tvl_scaled

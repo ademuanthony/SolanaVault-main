@@ -8,6 +8,56 @@
   },
   "instructions": [
     {
+      "name": "accept_admin",
+      "docs": [
+        "Accept admin role (second step). Must be signed by the pending admin."
+      ],
+      "discriminator": [
+        112,
+        42,
+        45,
+        90,
+        116,
+        181,
+        13,
+        170
+      ],
+      "accounts": [
+        {
+          "name": "new_admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "admin_register_user",
       "docs": [
         "Admin register a user (admin only)"
@@ -103,7 +153,8 @@
     {
       "name": "claim_dlmm_fees",
       "docs": [
-        "Claim trading fees from a DLMM position into the vault"
+        "Claim trading fees from a DLMM position. Pure CPI forwarder — TVL",
+        "must be reconciled afterwards via `update_tvl`."
       ],
       "discriminator": [
         102,
@@ -152,38 +203,10 @@
           "writable": true
         },
         {
-          "name": "vault_state",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116,
-                  95,
-                  115,
-                  116,
-                  97,
-                  116,
-                  101
-                ]
-              }
-            ]
-          }
-        },
-        {
           "name": "dlmm_program"
         }
       ],
       "args": [
-        {
-          "name": "claimed_amount",
-          "type": "u64"
-        },
         {
           "name": "cpi_data",
           "type": {
@@ -378,6 +401,37 @@
                   116,
                   101
                 ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_usdc_account",
+          "docs": [
+            "Vault USDC PDA — used to measure USDC recovered from the closed",
+            "position for logging (TVL still reconciles via `update_tvl`)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "global_config"
               }
             ]
           }
@@ -1250,6 +1304,10 @@
         {
           "name": "swap_amount",
           "type": "u64"
+        },
+        {
+          "name": "minimum_amount_out",
+          "type": "u64"
         }
       ]
     },
@@ -1333,6 +1391,37 @@
           }
         },
         {
+          "name": "vault_usdc_account",
+          "docs": [
+            "Vault USDC PDA — used to diff balance pre/post CPI and mark TVL",
+            "down by the amount of USDC deployed into the Meteora position."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "global_config"
+              }
+            ]
+          }
+        },
+        {
           "name": "dlmm_program"
         },
         {
@@ -1355,6 +1444,64 @@
             "defined": {
               "name": "DlmmCpiData"
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "propose_new_admin",
+      "docs": [
+        "Propose a new admin (first step of two-step rotation). `Some(pk)` sets",
+        "the pending admin; `None` cancels an in-flight proposal."
+      ],
+      "discriminator": [
+        232,
+        189,
+        155,
+        60,
+        4,
+        68,
+        17,
+        188
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "global_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_admin",
+          "type": {
+            "option": "pubkey"
           }
         }
       ]
@@ -1618,84 +1765,6 @@
       ]
     },
     {
-      "name": "simulate_yield",
-      "docs": [
-        "Simulate yield (Temporary for Verification)"
-      ],
-      "discriminator": [
-        218,
-        87,
-        103,
-        223,
-        193,
-        51,
-        91,
-        98
-      ],
-      "accounts": [
-        {
-          "name": "admin",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "global_config",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  103,
-                  108,
-                  111,
-                  98,
-                  97,
-                  108,
-                  95,
-                  99,
-                  111,
-                  110,
-                  102,
-                  105,
-                  103
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "vault_state",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116,
-                  95,
-                  115,
-                  116,
-                  97,
-                  116,
-                  101
-                ]
-              }
-            ]
-          }
-        }
-      ],
-      "args": [
-        {
-          "name": "amount",
-          "type": "u64"
-        }
-      ]
-    },
-    {
       "name": "unflag_user",
       "docs": [
         "Unflag a user account (admin only)"
@@ -1855,7 +1924,8 @@
     {
       "name": "update_vault_config",
       "docs": [
-        "Update global configuration (admin only)"
+        "Update global configuration (admin only). Admin rotation is NOT",
+        "included here — see `propose_new_admin` / `accept_admin`."
       ],
       "discriminator": [
         122,
@@ -2614,6 +2684,41 @@
       "code": 6020,
       "name": "TvlDecreaseTooLarge",
       "msg": "TVL decrease exceeds maximum allowed per update (20%)"
+    },
+    {
+      "code": 6021,
+      "name": "TvlIncreaseTooLarge",
+      "msg": "TVL increase exceeds maximum allowed per update (50%)"
+    },
+    {
+      "code": 6022,
+      "name": "VaultPaused",
+      "msg": "Vault is paused"
+    },
+    {
+      "code": 6023,
+      "name": "NoPendingAdmin",
+      "msg": "No pending admin to accept"
+    },
+    {
+      "code": 6024,
+      "name": "NotPendingAdmin",
+      "msg": "Signer does not match the pending admin"
+    },
+    {
+      "code": 6025,
+      "name": "ExceedsMaxTvl",
+      "msg": "Deposit would exceed global max TVL"
+    },
+    {
+      "code": 6026,
+      "name": "ExceedsMaxUserShares",
+      "msg": "Deposit would exceed per-user share cap"
+    },
+    {
+      "code": 6027,
+      "name": "SlippageExceeded",
+      "msg": "Slippage: output less than minimum_amount_out"
     }
   ],
   "types": [
@@ -2909,6 +3014,36 @@
             "type": "u64"
           },
           {
+            "name": "paused",
+            "docs": [
+              "Emergency pause flag — gates deposit / withdraw / claim_referral_earnings."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "pending_admin",
+            "docs": [
+              "Two-step admin rotation: proposed next admin. Cleared on accept."
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "max_tvl",
+            "docs": [
+              "Soft cap on global TVL (0 = disabled). Deposit reverts if exceeded."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_user_shares",
+            "docs": [
+              "Soft cap on per-user shares (0 = disabled). Deposit reverts if exceeded."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -3082,12 +3217,6 @@
         "kind": "struct",
         "fields": [
           {
-            "name": "admin",
-            "type": {
-              "option": "pubkey"
-            }
-          },
-          {
             "name": "tier1_threshold",
             "type": {
               "option": "u64"
@@ -3191,6 +3320,24 @@
           },
           {
             "name": "welcome_bonus_dev",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "paused",
+            "type": {
+              "option": "bool"
+            }
+          },
+          {
+            "name": "max_tvl",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "max_user_shares",
             "type": {
               "option": "u64"
             }

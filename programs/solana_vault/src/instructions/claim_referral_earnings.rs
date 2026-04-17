@@ -22,23 +22,32 @@ pub struct ClaimReferralEarnings<'info> {
     )]
     pub user_account: Account<'info, UserAccount>,
     
-    #[account(mut)]
-    pub user_usdc_account: Account<'info, TokenAccount>,
-    
     #[account(
         mut,
+        token::mint = global_config.usdc_mint,
+        token::authority = user,
+    )]
+    pub user_usdc_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        address = global_config.vault_usdc_account,
+        token::mint = global_config.usdc_mint,
         seeds = [b"vault_usdc", global_config.key().as_ref()],
         bump
     )]
-    pub vault_usdc_account: Account<'info, TokenAccount>,
-    
+    pub vault_usdc_account: Box<Account<'info, TokenAccount>>,
+
     pub token_program: Program<'info, Token>,
 }
 
 pub fn handler(ctx: Context<ClaimReferralEarnings>) -> Result<()> {
+    require!(!ctx.accounts.global_config.paused, VaultError::VaultPaused);
+
     let user_account = &mut ctx.accounts.user_account;
+    require!(!user_account.is_flagged, VaultError::UserFlagged);
     let amount = user_account.unclaimed_referral_earnings;
-    
+
     require!(amount > 0, VaultError::InsufficientFunds);
     
     // Transfer USDC to user

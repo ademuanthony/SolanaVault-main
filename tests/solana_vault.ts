@@ -786,7 +786,9 @@ describe("solana_vault", () => {
             globalConfig,
             dlmmPosition: dlmmPositionPda,
             vaultState,
+            vaultUsdcAccount,
             dlmmProgram: dlmmProgramId,
+            tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
           .signers([admin])
@@ -826,7 +828,9 @@ describe("solana_vault", () => {
             globalConfig,
             dlmmPosition: dlmmPositionPda,
             vaultState,
+            vaultUsdcAccount,
             dlmmProgram: dlmmProgramId,
+            tokenProgram: TOKEN_PROGRAM_ID,
           })
           .signers([admin])
           .rpc();
@@ -849,12 +853,11 @@ describe("solana_vault", () => {
 
       try {
         await (program.methods as any)
-          .claimDlmmFees(new BN(0), cpiData as any)
+          .claimDlmmFees(cpiData as any)
           .accounts({
             admin: admin.publicKey,
             globalConfig,
             dlmmPosition: fakeDlmmPosition.publicKey,
-            vaultState,
             dlmmProgram: dlmmProgramId,
           })
           .signers([admin])
@@ -893,7 +896,9 @@ describe("solana_vault", () => {
             globalConfig,
             dlmmPosition: dlmmPositionPda,
             vaultState,
+            vaultUsdcAccount,
             dlmmProgram: dlmmProgramId,
+            tokenProgram: TOKEN_PROGRAM_ID,
           })
           .signers([admin])
           .rpc();

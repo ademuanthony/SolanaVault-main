@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
-import { PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction, AddressLookupTableAccount } from "@solana/web3.js";
+import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { SolanaVault } from "../target/types/solana_vault";
 import { JupiterSwapData } from "./jupiter";
@@ -98,7 +98,6 @@ export interface JupiterSwapArgs {
   minimumAmountOut: BN;
   swapData: JupiterSwapData;
   remainingAccounts: anchor.web3.AccountMeta[];
-  addressLookupTableAccounts?: AddressLookupTableAccount[];
 }
 
 export interface JupiterSwapV2Args {
@@ -109,15 +108,14 @@ export interface JupiterSwapV2Args {
   destinationTokenAccount: PublicKey;
   jupiterSourceAta: PublicKey;
   jupiterDestinationAta: PublicKey;
-  /** Raw Jupiter instruction data bytes */
-  swapData: Buffer;
-  /** Amount to swap (transferred from vault PDA to standard ATA before swap) */
+  swapData: Buffer | Uint8Array;
   swapAmount: BN;
-  /** Jupiter swap accounts in exact order — passed as remainingAccounts */
+  /// Slippage rail: if post-swap output < `minimumAmountOut`, the on-chain
+  /// handler reverts with `SlippageExceeded` (High #5).
+  minimumAmountOut: BN;
   remainingAccounts: anchor.web3.AccountMeta[];
-  addressLookupTableAccounts?: AddressLookupTableAccount[];
-  /** Pre-swap instructions (e.g. ATA creation) to include before the CPI */
-  preInstructions?: TransactionInstruction[];
+  addressLookupTableAccounts?: anchor.web3.AddressLookupTableAccount[];
+  preInstructions?: anchor.web3.TransactionInstruction[];
 }
 
 export interface OpenDlmmPositionArgs {
@@ -125,6 +123,7 @@ export interface OpenDlmmPositionArgs {
   globalConfig: PublicKey;
   dlmmPosition: PublicKey;
   vaultState: PublicKey;
+  vaultUsdcAccount: PublicKey;
   dlmmProgram: PublicKey;
   params: any; // OpenDlmmPositionParams from IDL
   cpiData: DlmmCpiData;
@@ -136,6 +135,7 @@ export interface CloseDlmmPositionArgs {
   globalConfig: PublicKey;
   dlmmPosition: PublicKey;
   vaultState: PublicKey;
+  vaultUsdcAccount: PublicKey;
   dlmmProgram: PublicKey;
   cpiData: DlmmCpiData;
   remainingAccounts: anchor.web3.AccountMeta[];
@@ -145,11 +145,20 @@ export interface ClaimDlmmFeesArgs {
   admin: PublicKey;
   globalConfig: PublicKey;
   dlmmPosition: PublicKey;
-  vaultState: PublicKey;
   dlmmProgram: PublicKey;
-  claimedAmount: BN;
   cpiData: DlmmCpiData;
   remainingAccounts: anchor.web3.AccountMeta[];
+}
+
+export interface ProposeNewAdminArgs {
+  admin: PublicKey;
+  globalConfig: PublicKey;
+  newAdmin: PublicKey | null;
+}
+
+export interface AcceptAdminArgs {
+  newAdmin: PublicKey;
+  globalConfig: PublicKey;
 }
 
 export interface SetDevWalletArgs {
@@ -182,80 +191,12 @@ export interface WithdrawMarketerFeesArgs {
   amount: BN;
 }
 
-export interface SimulateYieldArgs {
-  admin: PublicKey;
-  globalConfig: PublicKey;
-  vaultState: PublicKey;
-  amount: BN;
-}
-
-export interface FlagUserArgs {
-  admin: PublicKey;
-  globalConfig: PublicKey;
-  userAccount: PublicKey;
-}
-
-export interface UnflagUserArgs {
-  admin: PublicKey;
-  globalConfig: PublicKey;
-  userAccount: PublicKey;
-}
-
-export interface AdminRegisterUserArgs {
-  admin: PublicKey;
-  globalConfig: PublicKey;
-  userAccount: PublicKey;
-  userWallet: PublicKey;
-  referrer: PublicKey | null;
-}
-
-export interface CloseUserAccountArgs {
-  authority: PublicKey;
-  globalConfig: PublicKey;
-  userAccount: PublicKey;
-  rentReceiver: PublicKey;
-}
-
-export interface CloseDlmmPositionAccountArgs {
-  admin: PublicKey;
-  globalConfig: PublicKey;
-  dlmmPosition: PublicKey;
-}
-
-export interface UpdateConfigParams {
-  admin: PublicKey | null;
-  tier1Threshold: BN | null;
-  tier2Threshold: BN | null;
-  tier1Fee: number | null;
-  tier2Fee: number | null;
-  tier3Fee: number | null;
-  companyShare: number | null;
-  dev1Share: number | null;
-  dev2Share: number | null;
-  dev3Share: number | null;
-  marketer1Share: number | null;
-  referralPoolShare: number | null;
-  referralL1Share: number | null;
-  referralL2Share: number | null;
-  referralL3Share: number | null;
-  referralL4Share: number | null;
-  referralL5Share: number | null;
-  welcomeBonusUser: BN | null;
-  welcomeBonusDev: BN | null;
-}
-
-export interface UpdateVaultConfigArgs {
-  admin: PublicKey;
-  globalConfig: PublicKey;
-  params: UpdateConfigParams;
-}
-
 export class SolanaVaultClient {
   constructor(public readonly program: Program<SolanaVault>) { }
 
-  async initialize(args: InitializeArgs, signer?: anchor.web3.Signer) {
+  async initialize(args: InitializeArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
       .initialize({
         companyWallet: args.companyWallet,
         dev1Wallet: args.dev1Wallet,
@@ -277,30 +218,28 @@ export class SolanaVaultClient {
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      })
+      .signers([signer])
+      .rpc();
   }
 
-  async register(args: RegisterArgs, signer?: anchor.web3.Signer) {
+  async register(args: RegisterArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
       .register(args.referrer ?? null)
       .accounts({
         user: args.user,
         globalConfig: args.globalConfig,
         userAccount: args.userAccount,
         systemProgram: SystemProgram.programId,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      })
+      .signers([signer])
+      .rpc();
   }
 
-  async deposit(args: DepositArgs, signer?: anchor.web3.Signer) {
+  async deposit(args: DepositArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
       .deposit(args.amount)
       .accounts({
         user: args.user,
@@ -312,15 +251,24 @@ export class SolanaVaultClient {
         userShareAccount: args.userShareAccount,
         vaultState: args.vaultState,
         tokenProgram: TOKEN_PROGRAM_ID,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      })
+      .signers([signer])
+      .rpc();
   }
 
-  async withdraw(args: WithdrawArgs, signer?: anchor.web3.Signer) {
+  async withdraw(args: WithdrawArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    // Check if remainingAccounts are provided and valid
+    const remaining = args.remainingAccounts || [];
+
+    console.log("SDK: withdraw called with", {
+      user: args.user.toBase58(),
+      userAccount: args.userAccount.toBase58(),
+      shares: args.shares.toString(),
+      remainingAccountsCount: remaining.length
+    });
+
+    return methods
       .withdraw(args.shares)
       .accounts({
         user: args.user,
@@ -333,16 +281,15 @@ export class SolanaVaultClient {
         shareMint: args.shareMint,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
-      });
-
-    if (args.remainingAccounts?.length) request.remainingAccounts(args.remainingAccounts);
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      })
+      .remainingAccounts(remaining)
+      .signers([signer])
+      .rpc();
   }
 
-  async claimReferralEarnings(args: ClaimReferralEarningsArgs, signer?: anchor.web3.Signer) {
+  async claimReferralEarnings(args: ClaimReferralEarningsArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
       .claimReferralEarnings()
       .accounts({
         user: args.user,
@@ -351,15 +298,14 @@ export class SolanaVaultClient {
         userUsdcAccount: args.userUsdcAccount,
         vaultUsdcAccount: args.vaultUsdcAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      })
+      .signers([signer])
+      .rpc();
   }
 
-  async welcomeBonusDeposit(args: WelcomeBonusDepositArgs, signer?: anchor.web3.Signer) {
+  async welcomeBonusDeposit(args: WelcomeBonusDepositArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
       .welcomeBonusDeposit()
       .accounts({
         admin: args.admin,
@@ -370,28 +316,26 @@ export class SolanaVaultClient {
         vaultState: args.vaultState,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .remainingAccounts(args.remainingAccounts);
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      .remainingAccounts(args.remainingAccounts)
+      .signers([signer])
+      .rpc();
   }
 
-  async setCompanyWallet(args: SetCompanyWalletArgs, signer?: anchor.web3.Signer) {
+  async setCompanyWallet(args: SetCompanyWalletArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
       .setCompanyWallet(args.newCompanyWallet)
       .accounts({
         admin: args.admin,
         globalConfig: args.globalConfig,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      })
+      .signers([signer])
+      .rpc();
   }
 
-  async withdrawCompanyFees(args: WithdrawCompanyFeesArgs, signer?: anchor.web3.Signer) {
+  async withdrawCompanyFees(args: WithdrawCompanyFeesArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
       .withdrawCompanyFees(args.amount)
       .accounts({
         admin: args.admin,
@@ -399,15 +343,44 @@ export class SolanaVaultClient {
         companyUsdcAccount: args.companyUsdcAccount,
         vaultUsdcAccount: args.vaultUsdcAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      })
+      .signers([signer])
+      .rpc();
   }
 
-  async jupiterSwap(args: JupiterSwapArgs, signer?: anchor.web3.Signer) {
+  async jupiterSwapV2(args: JupiterSwapV2Args, signer?: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const ix = await methods
+    let builder = methods
+      .jupiterSwapV2(
+        Buffer.from(args.swapData),
+        args.swapAmount,
+        args.minimumAmountOut,
+      )
+      .accounts({
+        admin: args.admin,
+        globalConfig: args.globalConfig,
+        jupiterProgram: args.jupiterProgram,
+        sourceTokenAccount: args.sourceTokenAccount,
+        destinationTokenAccount: args.destinationTokenAccount,
+        jupiterSourceAta: args.jupiterSourceAta,
+        jupiterDestinationAta: args.jupiterDestinationAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts(args.remainingAccounts);
+    if (args.preInstructions && args.preInstructions.length > 0) {
+      builder = builder.preInstructions(args.preInstructions);
+    }
+    if (signer) builder = builder.signers([signer]);
+    return builder.rpc(
+      args.addressLookupTableAccounts
+        ? { addressLookupTableAccounts: args.addressLookupTableAccounts }
+        : undefined,
+    );
+  }
+
+  async jupiterSwap(args: JupiterSwapArgs, signer: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    return methods
       .jupiterSwap(args.amount, args.minimumAmountOut, {
         accounts: args.swapData.accounts,
         data: args.swapData.data,
@@ -421,209 +394,101 @@ export class SolanaVaultClient {
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .remainingAccounts(args.remainingAccounts)
-      .instruction();
-
-    // Build a v0 VersionedTransaction with address lookup tables to stay under 1232 bytes
-    const provider = this.program.provider as anchor.AnchorProvider;
-    const latestBlockhash = await provider.connection.getLatestBlockhash();
-    const lookupTables = args.addressLookupTableAccounts || [];
-
-    const messageV0 = new TransactionMessage({
-      payerKey: args.admin,
-      recentBlockhash: latestBlockhash.blockhash,
-      instructions: [ix],
-    }).compileToV0Message(lookupTables);
-
-    const versionedTx = new VersionedTransaction(messageV0);
-
-    // Check size before signing to give a clear error
-    const rawSize = versionedTx.serialize().length;
-    console.log(`Jupiter swap tx size: ${rawSize} bytes (limit 1232), ALTs: ${lookupTables.length}, swap accounts: ${args.swapData.accounts.length}`);
-    if (rawSize > 1232) {
-      throw new Error(`Transaction too large: ${rawSize}/1232 bytes. Jupiter route uses too many accounts (${args.swapData.accounts.length}). Try a smaller or more common token pair.`);
-    }
-
-    if (signer) {
-      versionedTx.sign([signer]);
-    }
-
-    if (provider.wallet.signTransaction) {
-      const signed = await provider.wallet.signTransaction(versionedTx);
-      const txId = await provider.connection.sendRawTransaction(signed.serialize());
-      await provider.connection.confirmTransaction({
-        signature: txId,
-        blockhash: latestBlockhash.blockhash,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-      });
-      return txId;
-    }
-
-    throw new Error("Wallet does not support signTransaction");
-  }
-
-  async jupiterSwapV2(args: JupiterSwapV2Args) {
-    const methods: any = this.program.methods;
-    const swapIx = await methods
-      .jupiterSwapV2(args.swapData, args.swapAmount)
-      .accounts({
-        admin: args.admin,
-        globalConfig: args.globalConfig,
-        jupiterProgram: args.jupiterProgram,
-        sourceTokenAccount: args.sourceTokenAccount,
-        destinationTokenAccount: args.destinationTokenAccount,
-        jupiterSourceAta: args.jupiterSourceAta,
-        jupiterDestinationAta: args.jupiterDestinationAta,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .remainingAccounts(args.remainingAccounts)
-      .instruction();
-
-    // Build full instruction list: pre-instructions → swap CPI
-    const instructions: TransactionInstruction[] = [
-      ...(args.preInstructions || []),
-      swapIx,
-    ];
-
-    const provider = this.program.provider as anchor.AnchorProvider;
-    const latestBlockhash = await provider.connection.getLatestBlockhash();
-    const lookupTables = args.addressLookupTableAccounts || [];
-
-    const messageV0 = new TransactionMessage({
-      payerKey: args.admin,
-      recentBlockhash: latestBlockhash.blockhash,
-      instructions,
-    }).compileToV0Message(lookupTables);
-
-    const versionedTx = new VersionedTransaction(messageV0);
-
-    const rawSize = versionedTx.serialize().length;
-    console.log(`Jupiter swap v2 tx size: ${rawSize} bytes (limit 1232), ALTs: ${lookupTables.length}, remaining accounts: ${args.remainingAccounts.length}`);
-    if (rawSize > 1232) {
-      throw new Error(`Transaction too large: ${rawSize}/1232 bytes (${args.remainingAccounts.length} accounts).`);
-    }
-
-    if (provider.wallet.signTransaction) {
-      const signed = await provider.wallet.signTransaction(versionedTx);
-      const txId = await provider.connection.sendRawTransaction(signed.serialize());
-      await provider.connection.confirmTransaction({
-        signature: txId,
-        blockhash: latestBlockhash.blockhash,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-      });
-      return txId;
-    }
-
-    throw new Error("Wallet does not support signTransaction");
+      .signers([signer])
+      .rpc();
   }
 
   async openDlmmPosition(args: OpenDlmmPositionArgs, signers: anchor.web3.Signer[] = []) {
-    console.log('[SDK] openDlmmPosition called with:', {
-      admin: args.admin.toBase58(),
-      globalConfig: args.globalConfig.toBase58(),
-      dlmmPosition: args.dlmmPosition.toBase58(),
-      vaultState: args.vaultState.toBase58(),
-      dlmmProgram: args.dlmmProgram.toBase58(),
-      remainingAccountsCount: args.remainingAccounts.length,
-      signersCount: signers.length
-    });
-
     const methods: any = this.program.methods;
-
-    const ix = await methods
+    return methods
       .openDlmmPosition(args.params, args.cpiData)
       .accounts({
         admin: args.admin,
         globalConfig: args.globalConfig,
         dlmmPosition: args.dlmmPosition,
         vaultState: args.vaultState,
+        vaultUsdcAccount: args.vaultUsdcAccount,
         dlmmProgram: args.dlmmProgram,
+        tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
       .remainingAccounts(args.remainingAccounts)
-      .instruction();
-
-    const provider = this.program.provider as anchor.AnchorProvider;
-    const latestBlockhash = await provider.connection.getLatestBlockhash();
-
-    const messageV0 = new TransactionMessage({
-      payerKey: args.admin,
-      recentBlockhash: latestBlockhash.blockhash,
-      instructions: [ix],
-    }).compileToV0Message();
-
-    const versionedTx = new VersionedTransaction(messageV0);
-
-    // Partial-sign with keypairs (e.g. position mint) BEFORE sending to wallet
-    if (signers.length > 0) {
-      console.log('[SDK] Partial-signing with keypairs:', signers.map(s => s.publicKey.toBase58()));
-      versionedTx.sign(signers);
-    }
-
-    if (provider.wallet.signTransaction) {
-      const signed = await provider.wallet.signTransaction(versionedTx);
-      const txId = await provider.connection.sendRawTransaction(signed.serialize());
-      await provider.connection.confirmTransaction({
-        signature: txId,
-        blockhash: latestBlockhash.blockhash,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-      });
-      console.log('[SDK] Transaction successful:', txId);
-      return txId;
-    }
-
-    throw new Error("Wallet does not support signTransaction");
+      .signers(signers)
+      .rpc();
   }
 
-  async closeDlmmPosition(args: CloseDlmmPositionArgs, signer?: anchor.web3.Signer) {
+  async closeDlmmPosition(args: CloseDlmmPositionArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
       .closeDlmmPosition(args.cpiData)
       .accounts({
         admin: args.admin,
         globalConfig: args.globalConfig,
         dlmmPosition: args.dlmmPosition,
         vaultState: args.vaultState,
+        vaultUsdcAccount: args.vaultUsdcAccount,
         dlmmProgram: args.dlmmProgram,
+        tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .remainingAccounts(args.remainingAccounts);
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      .remainingAccounts(args.remainingAccounts)
+      .signers([signer])
+      .rpc();
   }
 
-  async claimDlmmFees(args: ClaimDlmmFeesArgs, signer?: anchor.web3.Signer) {
+  async claimDlmmFees(args: ClaimDlmmFeesArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
-      .claimDlmmFees(args.claimedAmount, args.cpiData)
+    return methods
+      .claimDlmmFees(args.cpiData)
       .accounts({
         admin: args.admin,
         globalConfig: args.globalConfig,
         dlmmPosition: args.dlmmPosition,
-        vaultState: args.vaultState,
         dlmmProgram: args.dlmmProgram,
       })
-      .remainingAccounts(args.remainingAccounts);
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      .remainingAccounts(args.remainingAccounts)
+      .signers([signer])
+      .rpc();
   }
 
-  async setDevWallet(args: SetDevWalletArgs, signer?: anchor.web3.Signer) {
+  async proposeNewAdmin(args: ProposeNewAdminArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
+      .proposeNewAdmin(args.newAdmin)
+      .accounts({
+        admin: args.admin,
+        globalConfig: args.globalConfig,
+      })
+      .signers([signer])
+      .rpc();
+  }
+
+  async acceptAdmin(args: AcceptAdminArgs, signer: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    return methods
+      .acceptAdmin()
+      .accounts({
+        newAdmin: args.newAdmin,
+        globalConfig: args.globalConfig,
+      })
+      .signers([signer])
+      .rpc();
+  }
+
+  async setDevWallet(args: SetDevWalletArgs, signer: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    return methods
       .setDevWallet(args.devIndex, args.newWallet)
       .accounts({
         devAuthority: args.devAuthority,
         globalConfig: args.globalConfig,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      })
+      .signers([signer])
+      .rpc();
   }
 
-  async withdrawDevFees(args: WithdrawDevFeesArgs, signer?: anchor.web3.Signer) {
+  async withdrawDevFees(args: WithdrawDevFeesArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
       .withdrawDevFees(args.devIndex, args.amount)
       .accounts({
         devAuthority: args.devAuthority,
@@ -631,28 +496,26 @@ export class SolanaVaultClient {
         devUsdcAccount: args.devUsdcAccount,
         vaultUsdcAccount: args.vaultUsdcAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      })
+      .signers([signer])
+      .rpc();
   }
 
-  async setMarketerWallet(args: SetMarketerWalletArgs, signer?: anchor.web3.Signer) {
+  async setMarketerWallet(args: SetMarketerWalletArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
       .setMarketerWallet(args.newWallet)
       .accounts({
         marketerAuthority: args.marketerAuthority,
         globalConfig: args.globalConfig,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      })
+      .signers([signer])
+      .rpc();
   }
 
-  async withdrawMarketerFees(args: WithdrawMarketerFeesArgs, signer?: anchor.web3.Signer) {
+  async withdrawMarketerFees(args: WithdrawMarketerFeesArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
-    const request = methods
+    return methods
       .withdrawMarketerFees(args.amount)
       .accounts({
         marketerAuthority: args.marketerAuthority,
@@ -660,108 +523,9 @@ export class SolanaVaultClient {
         marketerUsdcAccount: args.marketerUsdcAccount,
         vaultUsdcAccount: args.vaultUsdcAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
-  }
-
-  async simulateYield(args: SimulateYieldArgs, signer?: anchor.web3.Signer) {
-    const methods: any = this.program.methods;
-    const request = methods
-      .simulateYield(args.amount)
-      .accounts({
-        admin: args.admin,
-        globalConfig: args.globalConfig,
-        vaultState: args.vaultState,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
-  }
-
-  async flagUser(args: FlagUserArgs, signer?: anchor.web3.Signer) {
-    const methods: any = this.program.methods;
-    const request = methods
-      .flagUser()
-      .accounts({
-        admin: args.admin,
-        globalConfig: args.globalConfig,
-        userAccount: args.userAccount,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
-  }
-
-  async unflagUser(args: UnflagUserArgs, signer?: anchor.web3.Signer) {
-    const methods: any = this.program.methods;
-    const request = methods
-      .unflagUser()
-      .accounts({
-        admin: args.admin,
-        globalConfig: args.globalConfig,
-        userAccount: args.userAccount,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
-  }
-
-  async adminRegisterUser(args: AdminRegisterUserArgs, signer?: anchor.web3.Signer) {
-    const methods: any = this.program.methods;
-    const request = methods
-      .adminRegisterUser(args.userWallet, args.referrer)
-      .accounts({
-        admin: args.admin,
-        globalConfig: args.globalConfig,
-        userAccount: args.userAccount,
-        systemProgram: SystemProgram.programId,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
-  }
-
-  async closeUserAccount(args: CloseUserAccountArgs, signer?: anchor.web3.Signer) {
-    const methods: any = this.program.methods;
-    const request = methods
-      .closeUserAccount()
-      .accounts({
-        authority: args.authority,
-        globalConfig: args.globalConfig,
-        userAccount: args.userAccount,
-        rentReceiver: args.rentReceiver,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
-  }
-
-  async closeDlmmPositionAccount(args: CloseDlmmPositionAccountArgs, signer?: anchor.web3.Signer) {
-    const methods: any = this.program.methods;
-    const request = methods
-      .closeDlmmPositionAccount()
-      .accounts({
-        admin: args.admin,
-        globalConfig: args.globalConfig,
-        dlmmPosition: args.dlmmPosition,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
-  }
-
-  async updateVaultConfig(args: UpdateVaultConfigArgs, signer?: anchor.web3.Signer) {
-    const methods: any = this.program.methods;
-    const request = methods
-      .updateVaultConfig(args.params)
-      .accounts({
-        admin: args.admin,
-        globalConfig: args.globalConfig,
-      });
-
-    if (signer) request.signers([signer]);
-    return request.rpc();
+      })
+      .signers([signer])
+      .rpc();
   }
 }
+

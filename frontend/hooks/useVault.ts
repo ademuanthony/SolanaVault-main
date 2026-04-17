@@ -598,30 +598,6 @@ export function useVault() {
         }
     };
 
-    const simulateYield = async (amount: number) => {
-        if (!client || !publicKey) throw new Error('Not initialized');
-        setLoading(true);
-        try {
-            const { globalConfigPda, vaultStatePda } = getPDAs();
-
-            const tx = await client.simulateYield({
-                admin: publicKey,
-                globalConfig: globalConfigPda,
-                vaultState: vaultStatePda,
-                amount: new BN(amount * 1e6),
-            });
-
-            console.log('Yield simulation success:', tx);
-            await fetchState();
-            return tx;
-        } catch (error) {
-            console.error('Yield simulation failed:', error);
-            throw error;
-        } finally {
-            setLoading(false);
-        }
-    };
-
     /**
      * Calculate the real vault TVL from on-chain data:
      * vault USDC balance + all Meteora position values
@@ -786,14 +762,14 @@ export function useVault() {
                 return "devnet_simulated_swap_signature_" + Date.now();
             }
 
-            const { swapData, allMetas, addressLookupTableAccounts } = await buildJupiterCpi({
+            const { swapData, allMetas, minimumAmountOut, addressLookupTableAccounts } = await buildJupiterCpi({
                 connection,
                 inputMint: inputMintPubkey,
                 outputMint: outputMintPubkey,
                 amount: amountParam,
                 slippageBps,
                 userPublicKey: globalConfigPda, // The vault PDA is the "user" in Jupiter's eyes
-            });
+            }) as any;
 
             // Compute standard ATAs that Jupiter expects for the PDA
             const jupiterSourceAta = await getAssociatedTokenAddress(inputMintPubkey, globalConfigPda, true);
@@ -826,7 +802,9 @@ export function useVault() {
                 preInstructions.push(createAtaIx(jupiterDestinationAta, outputMintPubkey));
             }
 
-            // Use V2: the on-chain handler transfers tokens between vault PDAs and standard ATAs
+            // Use V2: the on-chain handler transfers tokens between vault PDAs and standard ATAs.
+            // Jupiter's quote response already provides a slippage-adjusted minimum output
+            // via `otherAmountThreshold`, surfaced here as `minimumAmountOut`.
             const tx = await client.jupiterSwapV2({
                 admin: publicKey,
                 globalConfig: globalConfigPda,
@@ -837,7 +815,8 @@ export function useVault() {
                 jupiterDestinationAta,
                 swapData: swapData.data,
                 swapAmount: new BN(amountParam.toString()),
-                remainingAccounts: allMetas.map(m => ({
+                minimumAmountOut: new BN((minimumAmountOut || '0').toString()),
+                remainingAccounts: allMetas.map((m: any) => ({
                     pubkey: m.pubkey,
                     isSigner: false,
                     isWritable: m.isWritable
@@ -956,6 +935,9 @@ export function useVault() {
 
             // ── TX1: Initialize position ──
             console.log('TX1: Building initializePosition...');
+            const [vaultUsdcPdaForOpen] = PublicKey.findProgramAddressSync(
+                [Buffer.from('vault_usdc'), globalConfigPda.toBuffer()], PROGRAM_ID
+            );
             const ix1 = await (program.methods as any)
                 .openDlmmPosition(params, initCpiData)
                 .accounts({
@@ -963,7 +945,9 @@ export function useVault() {
                     globalConfig: globalConfigPda,
                     dlmmPosition: dlmmPositionPda,
                     vaultState: vaultStatePda,
+                    vaultUsdcAccount: vaultUsdcPdaForOpen,
                     dlmmProgram: DLMM_PROGRAM_ID,
+                    tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                 })
                 .remainingAccounts(initRemaining)
@@ -1029,9 +1013,9 @@ export function useVault() {
                     return { pubkey, isSigner: false, isWritable: k.isWritable };
                 });
 
-                // Manually encode claimDlmmFees instruction (Anchor buffer too small for 16 accounts)
+                // Manually encode claimDlmmFees instruction (Anchor buffer too small for 16 accounts).
+                // claim_dlmm_fees now takes ONLY cpi_data (claimed_amount was removed in the audit fix).
                 const discriminator = Buffer.from([102, 188, 67, 120, 236, 199, 117, 122]);
-                const claimedAmountBuf = Buffer.alloc(8);
                 const accountsLenBuf = Buffer.alloc(4);
                 accountsLenBuf.writeUInt32LE(addLiqCpiAccounts.length);
                 const accountsBufs = addLiqCpiAccounts.map((a: any) => {
@@ -1043,7 +1027,7 @@ export function useVault() {
                 });
                 const dataLenBuf = Buffer.alloc(4);
                 dataLenBuf.writeUInt32LE(addLiqIx.data.length);
-                const ixData = Buffer.concat([discriminator, claimedAmountBuf, accountsLenBuf, ...accountsBufs, dataLenBuf, Buffer.from(addLiqIx.data)]);
+                const ixData = Buffer.concat([discriminator, accountsLenBuf, ...accountsBufs, dataLenBuf, Buffer.from(addLiqIx.data)]);
 
                 const ix2 = new TransactionInstruction({
                     programId: PROGRAM_ID,
@@ -1051,7 +1035,6 @@ export function useVault() {
                         { pubkey: publicKey, isSigner: true, isWritable: true },
                         { pubkey: globalConfigPda, isSigner: false, isWritable: true },
                         { pubkey: dlmmPositionPda, isSigner: false, isWritable: true },
-                        { pubkey: vaultStatePda, isSigner: false, isWritable: true },
                         { pubkey: DLMM_PROGRAM_ID, isSigner: false, isWritable: false },
                         ...addLiqRemaining,
                     ],
@@ -1201,9 +1184,8 @@ export function useVault() {
         meteoraIx: TransactionInstruction,
         dlmmPositionPda: PublicKey,
         globalConfigPda: PublicKey,
-        vaultStatePda: PublicKey,
+        _vaultStatePda: PublicKey, // kept for backwards-compat signature; claim_dlmm_fees no longer takes vault_state
         accountSwaps?: Map<string, PublicKey>,
-        claimedAmount: number = 0,
     ) => {
         if (!publicKey || !signTransaction) throw new Error('Wallet not connected');
         const DLMM_PROGRAM_ID = new PublicKey('LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo');
@@ -1229,16 +1211,10 @@ export function useVault() {
             pubkey: m.pubkey, isSigner: false, isWritable: m.isWritable,
         }));
 
-        // Manually encode claimDlmmFees instruction
+        // Manually encode claimDlmmFees instruction. Signature after audit fix:
+        // claim_dlmm_fees(cpi_data: DlmmCpiData). No more `claimed_amount` — TVL
+        // is reconciled off-chain via `update_tvl`.
         const discriminator = Buffer.from([102, 188, 67, 120, 236, 199, 117, 122]);
-        const claimedAmountBuf = Buffer.alloc(8);
-        // Write claimed_amount as u64 little-endian. Avoid Buffer.writeBigUInt64LE —
-        // not all browser Buffer polyfills implement the BigInt methods.
-        const MASK32 = BigInt("0xffffffff");
-        const SHIFT32 = BigInt(32);
-        const claimedBigInt = BigInt(Math.floor(claimedAmount));
-        claimedAmountBuf.writeUInt32LE(Number(claimedBigInt & MASK32), 0);
-        claimedAmountBuf.writeUInt32LE(Number((claimedBigInt >> SHIFT32) & MASK32), 4);
         const accountsLenBuf = Buffer.alloc(4);
         accountsLenBuf.writeUInt32LE(cpiAccounts.length);
         const accountsBufs = cpiAccounts.map((a: any) => {
@@ -1250,7 +1226,7 @@ export function useVault() {
         });
         const dataLenBuf = Buffer.alloc(4);
         dataLenBuf.writeUInt32LE(meteoraIx.data.length);
-        const ixData = Buffer.concat([discriminator, claimedAmountBuf, accountsLenBuf, ...accountsBufs, dataLenBuf, Buffer.from(meteoraIx.data)]);
+        const ixData = Buffer.concat([discriminator, accountsLenBuf, ...accountsBufs, dataLenBuf, Buffer.from(meteoraIx.data)]);
 
         const ix = new TransactionInstruction({
             programId: PROGRAM_ID,
@@ -1258,7 +1234,6 @@ export function useVault() {
                 { pubkey: publicKey, isSigner: true, isWritable: true },
                 { pubkey: globalConfigPda, isSigner: false, isWritable: true },
                 { pubkey: dlmmPositionPda, isSigner: false, isWritable: true },
-                { pubkey: vaultStatePda, isSigner: false, isWritable: true },
                 { pubkey: DLMM_PROGRAM_ID, isSigner: false, isWritable: false },
                 ...remainingAccounts,
             ],
@@ -1431,36 +1406,9 @@ export function useVault() {
             const poolPubkey = positionAccount.dlmmPool as PublicKey;
             const positionPubkey = positionAccount.positionNft as PublicKey;
 
-            // Fetch actual fee amounts from Meteora to update TVL
-            let feeValueUsdc = 0;
-            try {
-                const dlmmPool = await (await import('@meteora-ag/dlmm')).default.create(connection, poolPubkey);
-                const posData = await dlmmPool.getPosition(positionPubkey);
-                if (posData?.positionData) {
-                    const mintX = dlmmPool.lbPair.tokenXMint;
-                    const mintY = dlmmPool.lbPair.tokenYMint;
-                    const xDecimals = mintX.toBase58() === 'So11111111111111111111111111111111111111112' ? 9 : 6;
-                    const yDecimals = mintY.toBase58() === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ? 6 : 9;
-
-                    const feeX = posData.positionData.feeX ? Number(posData.positionData.feeX.toString()) / Math.pow(10, xDecimals) : 0;
-                    const feeY = posData.positionData.feeY ? Number(posData.positionData.feeY.toString()) / Math.pow(10, yDecimals) : 0;
-
-                    // Convert fees to USDC value
-                    const activeBin = await dlmmPool.getActiveBin();
-                    const rawPrice = parseFloat(activeBin.price);
-                    const decimalMultiplier = Math.pow(10, xDecimals - yDecimals);
-                    const priceXinY = rawPrice * decimalMultiplier;
-
-                    feeValueUsdc = feeX * priceXinY + feeY;
-                    console.log(`Fees to claim: ${feeX} X ($${(feeX * priceXinY).toFixed(4)}) + ${feeY} Y ($${feeY.toFixed(4)}) = $${feeValueUsdc.toFixed(4)} USDC`);
-                }
-            } catch (e) {
-                console.warn('Could not fetch fee amounts, TVL will not be updated:', e);
-            }
-
-            // Convert USDC value to raw amount (6 decimals)
-            const claimedAmountRaw = Math.floor(feeValueUsdc * 1e6);
-
+            // Fees may come in tokens other than USDC; on-chain `claim_dlmm_fees`
+            // is a pure forwarder and does NOT touch TVL. Off-chain orchestration
+            // must call `update_tvl` after claiming + swapping to reconcile.
             const cpiData = await buildClaimSwapFeeCpi({
                 connection,
                 pool: poolPubkey,
@@ -1485,9 +1433,9 @@ export function useVault() {
 
             const txId = await sendMeteoraCpiWithAlt(
                 meteoraIx, dlmmPosition, globalConfigPda, vaultStatePda,
-                undefined, claimedAmountRaw
+                undefined,
             );
-            console.log(`Claim DLMM Fees success: ${txId}, TVL updated by ${claimedAmountRaw} (raw USDC)`);
+            console.log(`Claim DLMM Fees forwarded: ${txId}. Run sync_tvl + update_tvl to reconcile.`);
             await fetchState();
             return txId;
         } catch (error) {
@@ -1757,7 +1705,6 @@ export function useVault() {
         withdrawCompanyFees,
         withdrawDevFees,
         withdrawMarketerFees,
-        simulateYield,
         syncTvl,
         jupiter_swap: jupiterSwap,
         openDlmmPosition,

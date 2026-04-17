@@ -3,6 +3,7 @@ use anchor_lang::solana_program::{
     instruction::{AccountMeta, Instruction},
     program::{invoke, invoke_signed},
 };
+use anchor_spl::token::TokenAccount;
 
 use crate::errors::VaultError;
 use crate::state::{DlmmPosition, GlobalConfig, VaultState};
@@ -36,6 +37,17 @@ pub struct CloseDlmmPosition<'info> {
     )]
     pub vault_state: Account<'info, VaultState>,
 
+    /// Vault USDC PDA — used to measure USDC recovered from the closed
+    /// position for logging (TVL still reconciles via `update_tvl`).
+    #[account(
+        mut,
+        address = global_config.vault_usdc_account,
+        token::mint = global_config.usdc_mint,
+        seeds = [b"vault_usdc", global_config.key().as_ref()],
+        bump
+    )]
+    pub vault_usdc_account: Box<Account<'info, TokenAccount>>,
+
     /// CHECK: Meteora DLMM program
     pub dlmm_program: AccountInfo<'info>,
 }
@@ -54,6 +66,9 @@ pub fn handler<'info>(
     );
 
     let dlmm_program_key = ctx.accounts.dlmm_program.key();
+
+    // Snapshot vault USDC balance pre-CPI for the post-CPI delta log.
+    let pre_usdc = ctx.accounts.vault_usdc_account.amount;
 
     let metas: Vec<AccountMeta> = cpi_data
         .accounts
@@ -109,6 +124,12 @@ pub fn handler<'info>(
         invoke(&ix, &account_infos).map_err(|_| VaultError::InvalidRemainingAccounts)?;
     }
 
+    // Reload and log the USDC delta so an off-chain orchestrator can decide
+    // whether to call `update_tvl` (and by how much). TVL is not mutated here.
+    ctx.accounts.vault_usdc_account.reload()?;
+    let post_usdc = ctx.accounts.vault_usdc_account.amount;
+    let usdc_recovered = post_usdc.saturating_sub(pre_usdc);
+
     // Mark the position as closed and decrement positions_count (account will be closed after handler).
     let position = &mut ctx.accounts.dlmm_position;
     position.token_x_amount = 0;
@@ -122,10 +143,11 @@ pub fn handler<'info>(
     }
 
     msg!(
-        "DLMM position closed: pool={}, index={}, nft={}",
+        "DLMM position closed: pool={}, index={}, nft={}, usdc_recovered={}",
         position.dlmm_pool,
         position.position_index,
-        position.position_nft
+        position.position_nft,
+        usdc_recovered
     );
 
     Ok(())

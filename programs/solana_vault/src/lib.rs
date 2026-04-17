@@ -25,7 +25,6 @@ use instructions::{
         open_dlmm_position::*,
         close_dlmm_position::*,
         claim_dlmm_fees::*,
-        simulate_yield::*,
         flag_user::*,
         unflag_user::*,
         admin_register_user::*,
@@ -34,6 +33,8 @@ use instructions::{
         close_pda_token_account::*,
         update_tvl::*,
         update_vault_config::*,
+        propose_new_admin::*,
+        accept_admin::*,
     },
     // Dev instructions
     dev::{
@@ -83,7 +84,7 @@ pub mod solana_vault {
 
     /// Deposit welcome bonus for a new user
     pub fn welcome_bonus_deposit<'info>(
-        ctx: Context<'_, '_, '_, 'info, WelcomeBonusDeposit<'info>>,
+        ctx: Context<'_, '_, 'info, 'info, WelcomeBonusDeposit<'info>>,
     ) -> Result<()> {
         instructions::admin::welcome_bonus_deposit::handler(ctx)
     }
@@ -115,8 +116,9 @@ pub mod solana_vault {
         ctx: Context<'_, '_, '_, 'info, JupiterSwapV2<'info>>,
         swap_data: Vec<u8>,
         swap_amount: u64,
+        minimum_amount_out: u64,
     ) -> Result<()> {
-        instructions::admin::jupiter_swap_v2::handler(ctx, swap_data, swap_amount)
+        instructions::admin::jupiter_swap_v2::handler(ctx, swap_data, swap_amount, minimum_amount_out)
     }
 
     /// Open a DLMM position via Meteora (CPI)
@@ -136,18 +138,13 @@ pub mod solana_vault {
         instructions::admin::close_dlmm_position::handler(ctx, cpi_data)
     }
 
-    /// Claim trading fees from a DLMM position into the vault
+    /// Claim trading fees from a DLMM position. Pure CPI forwarder — TVL
+    /// must be reconciled afterwards via `update_tvl`.
     pub fn claim_dlmm_fees<'info>(
         ctx: Context<'_, '_, '_, 'info, ClaimDlmmFees<'info>>,
-        claimed_amount: u64,
         cpi_data: DlmmCpiData,
     ) -> Result<()> {
-        instructions::admin::claim_dlmm_fees::handler(ctx, claimed_amount, cpi_data)
-    }
-
-    /// Simulate yield (Temporary for Verification)
-    pub fn simulate_yield(ctx: Context<SimulateYield>, amount: u64) -> Result<()> {
-        instructions::admin::simulate_yield::handler(ctx, amount)
+        instructions::admin::claim_dlmm_fees::handler(ctx, cpi_data)
     }
 
     // Dev instructions
@@ -229,8 +226,20 @@ pub mod solana_vault {
         instructions::admin::update_tvl::handler(ctx, new_tvl)
     }
 
-    /// Update global configuration (admin only)
+    /// Update global configuration (admin only). Admin rotation is NOT
+    /// included here — see `propose_new_admin` / `accept_admin`.
     pub fn update_vault_config(ctx: Context<UpdateVaultConfig>, params: UpdateConfigParams) -> Result<()> {
         instructions::admin::update_vault_config::handler(ctx, params)
+    }
+
+    /// Propose a new admin (first step of two-step rotation). `Some(pk)` sets
+    /// the pending admin; `None` cancels an in-flight proposal.
+    pub fn propose_new_admin(ctx: Context<ProposeNewAdmin>, new_admin: Option<Pubkey>) -> Result<()> {
+        instructions::admin::propose_new_admin::handler(ctx, new_admin)
+    }
+
+    /// Accept admin role (second step). Must be signed by the pending admin.
+    pub fn accept_admin(ctx: Context<AcceptAdmin>) -> Result<()> {
+        instructions::admin::accept_admin::handler(ctx)
     }
 }

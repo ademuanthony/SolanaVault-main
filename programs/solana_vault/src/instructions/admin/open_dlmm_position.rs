@@ -3,6 +3,7 @@ use anchor_lang::solana_program::{
     instruction::{AccountMeta, Instruction},
     program::{invoke, invoke_signed},
 };
+use anchor_spl::token::TokenAccount;
 
 use crate::errors::VaultError;
 use crate::state::{DlmmMode, DlmmPosition, GlobalConfig, VaultState};
@@ -82,6 +83,17 @@ pub struct OpenDlmmPosition<'info> {
     )]
     pub vault_state: Account<'info, VaultState>,
 
+    /// Vault USDC PDA — used to diff balance pre/post CPI and mark TVL
+    /// down by the amount of USDC deployed into the Meteora position.
+    #[account(
+        mut,
+        address = global_config.vault_usdc_account,
+        token::mint = global_config.usdc_mint,
+        seeds = [b"vault_usdc", global_config.key().as_ref()],
+        bump
+    )]
+    pub vault_usdc_account: Box<Account<'info, TokenAccount>>,
+
     /// CHECK: Meteora DLMM program
     pub dlmm_program: AccountInfo<'info>,
 
@@ -104,6 +116,9 @@ pub fn handler<'info>(
     );
 
     let dlmm_program_key = ctx.accounts.dlmm_program.key();
+
+    // Snapshot vault USDC balance pre-CPI to compute the TVL delta afterwards.
+    let pre_usdc = ctx.accounts.vault_usdc_account.amount;
 
     // Build the DLMM `Instruction` from client-provided metas + data.
     let metas: Vec<AccountMeta> = cpi_data
@@ -160,6 +175,14 @@ pub fn handler<'info>(
         invoke(&ix, &account_infos).map_err(|_| VaultError::InvalidRemainingAccounts)?;
     }
 
+    // TVL is conserved by "deploy into position": USDC leaves the vault ATA
+    // but is still capital-at-work. Do not mutate `total_tvl` here — that
+    // stays pinned to the last `update_tvl` snapshot. We only log the delta
+    // for off-chain monitoring.
+    ctx.accounts.vault_usdc_account.reload()?;
+    let post_usdc = ctx.accounts.vault_usdc_account.amount;
+    let usdc_deployed = pre_usdc.saturating_sub(post_usdc);
+
     // Update DlmmPosition metadata after successful CPI.
     let position = &mut ctx.accounts.dlmm_position;
     position.position_index = params.position_index;
@@ -184,10 +207,11 @@ pub fn handler<'info>(
     }
 
     msg!(
-        "DLMM position opened: pool={}, index={}, nft={}",
+        "DLMM position opened: pool={}, index={}, nft={}, usdc_deployed={}",
         params.dlmm_pool,
         params.position_index,
-        params.position_nft
+        params.position_nft,
+        usdc_deployed
     );
 
     Ok(())

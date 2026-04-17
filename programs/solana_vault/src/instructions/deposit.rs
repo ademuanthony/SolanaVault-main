@@ -23,29 +23,35 @@ pub struct Deposit<'info> {
     )]
     pub user_account: Account<'info, UserAccount>,
     
-    #[account(mut)]
-    pub user_usdc_account: Account<'info, TokenAccount>,
-    
     #[account(
         mut,
+        token::mint = global_config.usdc_mint,
+        token::authority = user,
+    )]
+    pub user_usdc_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        address = global_config.vault_usdc_account,
+        token::mint = global_config.usdc_mint,
         seeds = [b"vault_usdc", global_config.key().as_ref()],
         bump
     )]
-    pub vault_usdc_account: Account<'info, TokenAccount>,
-    
+    pub vault_usdc_account: Box<Account<'info, TokenAccount>>,
+
     #[account(
         mut,
         address = global_config.share_mint
     )]
-    pub share_mint: Account<'info, Mint>,
-    
+    pub share_mint: Box<Account<'info, Mint>>,
+
     #[account(
         init_if_needed,
         payer = user,
         associated_token::mint = share_mint,
         associated_token::authority = user,
     )]
-    pub user_share_account: Account<'info, TokenAccount>,
+    pub user_share_account: Box<Account<'info, TokenAccount>>,
     
     #[account(
         mut,
@@ -61,13 +67,24 @@ pub struct Deposit<'info> {
 
 pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     require!(amount > 0, VaultError::InvalidDepositAmount);
-    
+    require!(!ctx.accounts.global_config.paused, VaultError::VaultPaused);
+
     let user_account = &mut ctx.accounts.user_account;
-    
+
     // Check if user is flagged
     require!(!user_account.is_flagged, VaultError::UserFlagged);
-    
+
     let vault_state = &mut ctx.accounts.vault_state;
+
+    // Enforce global TVL cap (0 = disabled)
+    let max_tvl = ctx.accounts.global_config.max_tvl;
+    if max_tvl > 0 {
+        let projected_tvl = vault_state
+            .total_tvl
+            .checked_add(amount)
+            .ok_or(VaultError::MathOverflow)?;
+        require!(projected_tvl <= max_tvl, VaultError::ExceedsMaxTvl);
+    }
     
     // Transfer USDC from user to vault
     let cpi_accounts = Transfer {
@@ -95,6 +112,19 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
             .ok_or(VaultError::MathOverflow)?
     };
     
+    // Enforce per-user share cap (0 = disabled)
+    let max_user_shares = ctx.accounts.global_config.max_user_shares;
+    if max_user_shares > 0 {
+        let projected_user_shares = user_account
+            .shares
+            .checked_add(shares_to_mint)
+            .ok_or(VaultError::MathOverflow)?;
+        require!(
+            projected_user_shares <= max_user_shares,
+            VaultError::ExceedsMaxUserShares
+        );
+    }
+
     // Update weighted average entry price
     if user_account.shares == 0 {
         user_account.entry_price = current_share_price;

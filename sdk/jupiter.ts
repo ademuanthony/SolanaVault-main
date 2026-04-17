@@ -48,6 +48,8 @@ export interface BuildJupiterCpiResult {
    * - the remaining ones via `.remainingAccounts(...)`
    */
   allMetas: SwapAccountMeta[];
+  /** Jupiter's quoted minimum output (already slippage-adjusted). Decimal string. */
+  minimumAmountOut: string;
   /** Setup instructions (e.g. ATA creation) that must run before the swap */
   setupInstructions: ParsedInstruction[];
   /** Optional cleanup instruction (e.g. close wSOL account) */
@@ -162,6 +164,13 @@ export async function buildJupiterCpi(
       }
     : null;
 
-  return { swapData, allMetas, setupInstructions, cleanupInstruction };
+  // Jupiter's `otherAmountThreshold` is the slippage-adjusted minimum out.
+  // Fall back to `outAmount` if missing (older API shapes).
+  const q = quoteResponse as any;
+  const minimumAmountOut = String(
+    q?.otherAmountThreshold ?? q?.outAmount ?? "0",
+  );
+
+  return { swapData, allMetas, minimumAmountOut, setupInstructions, cleanupInstruction };
 }
 

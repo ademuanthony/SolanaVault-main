@@ -107,7 +107,12 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     
     global_config.welcome_bonus_user = crate::constants::WELCOME_BONUS_USER;
     global_config.welcome_bonus_dev = crate::constants::WELCOME_BONUS_DEV;
-    
+
+    global_config.paused = false;
+    global_config.pending_admin = None;
+    global_config.max_tvl = 0;
+    global_config.max_user_shares = 0;
+
     global_config.bump = ctx.bumps.global_config;
     
     vault_state.total_tvl = 0;

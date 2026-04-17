@@ -213,6 +213,11 @@ async function main() {
     oneSided: Boolean(AMOUNT_X === 0 || AMOUNT_Y === 0),
   };
 
+  const [vaultUsdcPdaForOpen] = PublicKey.findProgramAddressSync(
+    [Buffer.from("vault_usdc"), globalConfigPda.toBuffer()],
+    PROGRAM_ID,
+  );
+
   const ix1 = await program.methods
     .openDlmmPosition(params, initCpiData)
     .accounts({
@@ -220,13 +225,15 @@ async function main() {
       globalConfig: globalConfigPda,
       dlmmPosition: dlmmPositionPda!,
       vaultState: vaultStatePda,
+      vaultUsdcAccount: vaultUsdcPdaForOpen,
       dlmmProgram: DLMM_PROGRAM_ID,
+      tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
     .remainingAccounts(buildRemainingAccounts(initIx))
     .instruction();
 
-  // ── Instruction 2: claimDlmmFees (addLiquidityByStrategy CPI, claimed_amount=0) ──
+  // ── Instruction 2: claimDlmmFees (addLiquidityByStrategy CPI) ──
   // Built manually because Anchor's encoder buffer is too small for 16 CPI accounts.
   const allInstructions = [ix1];
 
@@ -256,11 +263,9 @@ async function main() {
     }
 
     // Manually Borsh-encode the claimDlmmFees instruction data:
-    // discriminator(8) + claimed_amount(u64, 8) + cpi_data.accounts(vec) + cpi_data.data(vec)
-    // claim_dlmm_fees discriminator from IDL
+    // discriminator(8) + cpi_data.accounts(vec) + cpi_data.data(vec)
+    // (claim_dlmm_fees no longer takes a claimed_amount arg after the audit fix)
     const discriminator = Buffer.from([102, 188, 67, 120, 236, 199, 117, 122]);
-
-    const claimedAmountBuf = Buffer.alloc(8); // 0 as u64
 
     // Encode Vec<DlmmAccountMeta>
     const numAccounts = addLiqCpiData.accounts.length;
@@ -281,7 +286,6 @@ async function main() {
 
     const ixData = Buffer.concat([
       discriminator,
-      claimedAmountBuf,
       accountsLenBuf,
       ...accountsBufs,
       dataLenBuf,
@@ -303,7 +307,6 @@ async function main() {
         { pubkey: adminKeypair.publicKey, isSigner: true, isWritable: true },
         { pubkey: globalConfigPda, isSigner: false, isWritable: true },
         { pubkey: dlmmPositionPda!, isSigner: false, isWritable: true },
-        { pubkey: vaultStatePda, isSigner: false, isWritable: true },
         { pubkey: DLMM_PROGRAM_ID, isSigner: false, isWritable: false },
         ...addLiqRemaining,
       ],

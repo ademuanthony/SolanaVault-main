@@ -5,7 +5,7 @@ use anchor_lang::solana_program::{
 };
 
 use crate::errors::VaultError;
-use crate::state::{DlmmPosition, GlobalConfig, VaultState};
+use crate::state::{DlmmPosition, GlobalConfig};
 use super::open_dlmm_position::{DlmmCpiData, get_meteora_dlmm_program_id};
 
 #[derive(Accounts)]
@@ -24,22 +24,19 @@ pub struct ClaimDlmmFees<'info> {
     #[account(mut)]
     pub dlmm_position: Account<'info, DlmmPosition>,
 
-    #[account(
-        mut,
-        seeds = [VaultState::SEED],
-        bump = vault_state.bump
-    )]
-    pub vault_state: Account<'info, VaultState>,
-
     /// CHECK: Meteora DLMM program
     pub dlmm_program: AccountInfo<'info>,
 }
 
 /// Expected remaining accounts: all additional accounts required by the
 /// Meteora DLMM CPI for claiming swap fees / rewards into the vault.
+///
+/// **TVL is NOT updated here** — `claim_dlmm_fees` is a pure CPI forwarder.
+/// All TVL accounting flows through `update_tvl` (the single trusted entry
+/// point) so the admin cannot inflate share price by supplying a bogus
+/// `claimed_amount`.
 pub fn handler<'info>(
     ctx: Context<'_, '_, '_, 'info, ClaimDlmmFees<'info>>,
-    claimed_amount: u64,
     cpi_data: DlmmCpiData,
 ) -> Result<()> {
     // Validate program id
@@ -105,20 +102,10 @@ pub fn handler<'info>(
         invoke(&ix, &account_infos).map_err(|_| VaultError::InvalidRemainingAccounts)?;
     }
 
-    // Trust the admin-provided claimed_amount and add it to vault TVL.
-    if claimed_amount > 0 {
-        let vault_state = &mut ctx.accounts.vault_state;
-        vault_state.total_tvl = vault_state
-            .total_tvl
-            .checked_add(claimed_amount)
-            .ok_or(VaultError::MathOverflow)?;
-    }
-
     msg!(
-        "DLMM fees claimed: pool={}, index={}, amount={}",
+        "DLMM fees claimed (CPI forwarded): pool={}, index={}",
         ctx.accounts.dlmm_position.dlmm_pool,
         ctx.accounts.dlmm_position.position_index,
-        claimed_amount
     );
 
     Ok(())

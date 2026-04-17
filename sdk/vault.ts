@@ -100,11 +100,30 @@ export interface JupiterSwapArgs {
   remainingAccounts: anchor.web3.AccountMeta[];
 }
 
+export interface JupiterSwapV2Args {
+  admin: PublicKey;
+  globalConfig: PublicKey;
+  jupiterProgram: PublicKey;
+  sourceTokenAccount: PublicKey;
+  destinationTokenAccount: PublicKey;
+  jupiterSourceAta: PublicKey;
+  jupiterDestinationAta: PublicKey;
+  swapData: Buffer | Uint8Array;
+  swapAmount: BN;
+  /// Slippage rail: if post-swap output < `minimumAmountOut`, the on-chain
+  /// handler reverts with `SlippageExceeded` (High #5).
+  minimumAmountOut: BN;
+  remainingAccounts: anchor.web3.AccountMeta[];
+  addressLookupTableAccounts?: anchor.web3.AddressLookupTableAccount[];
+  preInstructions?: anchor.web3.TransactionInstruction[];
+}
+
 export interface OpenDlmmPositionArgs {
   admin: PublicKey;
   globalConfig: PublicKey;
   dlmmPosition: PublicKey;
   vaultState: PublicKey;
+  vaultUsdcAccount: PublicKey;
   dlmmProgram: PublicKey;
   params: any; // OpenDlmmPositionParams from IDL
   cpiData: DlmmCpiData;
@@ -116,6 +135,7 @@ export interface CloseDlmmPositionArgs {
   globalConfig: PublicKey;
   dlmmPosition: PublicKey;
   vaultState: PublicKey;
+  vaultUsdcAccount: PublicKey;
   dlmmProgram: PublicKey;
   cpiData: DlmmCpiData;
   remainingAccounts: anchor.web3.AccountMeta[];
@@ -125,11 +145,20 @@ export interface ClaimDlmmFeesArgs {
   admin: PublicKey;
   globalConfig: PublicKey;
   dlmmPosition: PublicKey;
-  vaultState: PublicKey;
   dlmmProgram: PublicKey;
-  claimedAmount: BN;
   cpiData: DlmmCpiData;
   remainingAccounts: anchor.web3.AccountMeta[];
+}
+
+export interface ProposeNewAdminArgs {
+  admin: PublicKey;
+  globalConfig: PublicKey;
+  newAdmin: PublicKey | null;
+}
+
+export interface AcceptAdminArgs {
+  newAdmin: PublicKey;
+  globalConfig: PublicKey;
 }
 
 export interface SetDevWalletArgs {
@@ -319,6 +348,36 @@ export class SolanaVaultClient {
       .rpc();
   }
 
+  async jupiterSwapV2(args: JupiterSwapV2Args, signer?: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    let builder = methods
+      .jupiterSwapV2(
+        Buffer.from(args.swapData),
+        args.swapAmount,
+        args.minimumAmountOut,
+      )
+      .accounts({
+        admin: args.admin,
+        globalConfig: args.globalConfig,
+        jupiterProgram: args.jupiterProgram,
+        sourceTokenAccount: args.sourceTokenAccount,
+        destinationTokenAccount: args.destinationTokenAccount,
+        jupiterSourceAta: args.jupiterSourceAta,
+        jupiterDestinationAta: args.jupiterDestinationAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts(args.remainingAccounts);
+    if (args.preInstructions && args.preInstructions.length > 0) {
+      builder = builder.preInstructions(args.preInstructions);
+    }
+    if (signer) builder = builder.signers([signer]);
+    return builder.rpc(
+      args.addressLookupTableAccounts
+        ? { addressLookupTableAccounts: args.addressLookupTableAccounts }
+        : undefined,
+    );
+  }
+
   async jupiterSwap(args: JupiterSwapArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
@@ -348,7 +407,9 @@ export class SolanaVaultClient {
         globalConfig: args.globalConfig,
         dlmmPosition: args.dlmmPosition,
         vaultState: args.vaultState,
+        vaultUsdcAccount: args.vaultUsdcAccount,
         dlmmProgram: args.dlmmProgram,
+        tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
       .remainingAccounts(args.remainingAccounts)
@@ -365,7 +426,9 @@ export class SolanaVaultClient {
         globalConfig: args.globalConfig,
         dlmmPosition: args.dlmmPosition,
         vaultState: args.vaultState,
+        vaultUsdcAccount: args.vaultUsdcAccount,
         dlmmProgram: args.dlmmProgram,
+        tokenProgram: TOKEN_PROGRAM_ID,
       })
       .remainingAccounts(args.remainingAccounts)
       .signers([signer])
@@ -375,15 +438,38 @@ export class SolanaVaultClient {
   async claimDlmmFees(args: ClaimDlmmFeesArgs, signer: anchor.web3.Signer) {
     const methods: any = this.program.methods;
     return methods
-      .claimDlmmFees(args.claimedAmount, args.cpiData)
+      .claimDlmmFees(args.cpiData)
       .accounts({
         admin: args.admin,
         globalConfig: args.globalConfig,
         dlmmPosition: args.dlmmPosition,
-        vaultState: args.vaultState,
         dlmmProgram: args.dlmmProgram,
       })
       .remainingAccounts(args.remainingAccounts)
+      .signers([signer])
+      .rpc();
+  }
+
+  async proposeNewAdmin(args: ProposeNewAdminArgs, signer: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    return methods
+      .proposeNewAdmin(args.newAdmin)
+      .accounts({
+        admin: args.admin,
+        globalConfig: args.globalConfig,
+      })
+      .signers([signer])
+      .rpc();
+  }
+
+  async acceptAdmin(args: AcceptAdminArgs, signer: anchor.web3.Signer) {
+    const methods: any = this.program.methods;
+    return methods
+      .acceptAdmin()
+      .accounts({
+        newAdmin: args.newAdmin,
+        globalConfig: args.globalConfig,
+      })
       .signers([signer])
       .rpc();
   }

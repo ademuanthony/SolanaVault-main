@@ -66,4 +66,25 @@ pub enum VaultError {
 
     #[msg("TVL decrease exceeds maximum allowed per update (20%)")]
     TvlDecreaseTooLarge,
+
+    #[msg("TVL increase exceeds maximum allowed per update (50%)")]
+    TvlIncreaseTooLarge,
+
+    #[msg("Vault is paused")]
+    VaultPaused,
+
+    #[msg("No pending admin to accept")]
+    NoPendingAdmin,
+
+    #[msg("Signer does not match the pending admin")]
+    NotPendingAdmin,
+
+    #[msg("Deposit would exceed global max TVL")]
+    ExceedsMaxTvl,
+
+    #[msg("Deposit would exceed per-user share cap")]
+    ExceedsMaxUserShares,
+
+    #[msg("Slippage: output less than minimum_amount_out")]
+    SlippageExceeded,
 }

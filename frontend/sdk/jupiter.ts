@@ -1,4 +1,4 @@
-import { PublicKey, Connection, AddressLookupTableAccount } from "@solana/web3.js";
+import { PublicKey, Connection } from "@solana/web3.js";
 
 /**
  * Types that mirror the on-chain JupiterSwapData and SwapAccountMeta.
@@ -48,8 +48,8 @@ export interface BuildJupiterCpiResult {
    * - the remaining ones via `.remainingAccounts(...)`
    */
   allMetas: SwapAccountMeta[];
-  /** Address lookup tables for building versioned transactions */
-  addressLookupTableAccounts: AddressLookupTableAccount[];
+  /** Jupiter's quoted minimum output (already slippage-adjusted). Decimal string. */
+  minimumAmountOut: string;
   /** Setup instructions (e.g. ATA creation) that must run before the swap */
   setupInstructions: ParsedInstruction[];
   /** Optional cleanup instruction (e.g. close wSOL account) */
@@ -62,16 +62,14 @@ export interface BuildJupiterCpiResult {
  * This helper:
  * - Calls Jupiter's v1 quote API
  * - Calls /swap-instructions to get a single swap instruction
- * - Fetches address lookup tables for versioned transaction compression
  * - Converts that into:
  *   - swapData: to pass into `program.methods.jupiterSwap(...)`
  *   - allMetas: full ordered list of account metas for `remainingAccounts`
- *   - addressLookupTableAccounts: for building v0 VersionedTransactions
  */
 export async function buildJupiterCpi(
   params: BuildJupiterCpiParams
 ): Promise<BuildJupiterCpiResult> {
-  const { connection, inputMint, outputMint, amount, slippageBps, userPublicKey } = params;
+  const { inputMint, outputMint, amount, slippageBps, userPublicKey } = params;
 
   const quoteUrl = new URL("https://api.jup.ag/swap/v1/quote");
   quoteUrl.searchParams.set("inputMint", inputMint.toBase58());
@@ -91,8 +89,7 @@ export async function buildJupiterCpi(
 
   const quoteRes = await fetch(quoteUrl.toString(), { headers: authHeaders });
   if (!quoteRes.ok) {
-    const body = await quoteRes.text();
-    throw new Error(`Jupiter quote failed: ${quoteRes.status} ${body}`);
+    throw new Error(`Jupiter quote failed: ${quoteRes.status} ${quoteRes.statusText}`);
   }
   const quoteResponse = await quoteRes.json();
 
@@ -111,8 +108,9 @@ export async function buildJupiterCpi(
   });
 
   if (!swapRes.ok) {
-    const body = await swapRes.text();
-    throw new Error(`Jupiter swap-instructions failed: ${swapRes.status} ${body}`);
+    throw new Error(
+      `Jupiter swap-instructions failed: ${swapRes.status} ${swapRes.statusText}`
+    );
   }
 
   const swapJson = await swapRes.json();
@@ -166,20 +164,13 @@ export async function buildJupiterCpi(
       }
     : null;
 
-  // Fetch address lookup tables for versioned transaction compression
-  const altAddresses: string[] = swapJson.addressLookupTableAddresses || [];
-  const addressLookupTableAccounts: AddressLookupTableAccount[] = [];
+  // Jupiter's `otherAmountThreshold` is the slippage-adjusted minimum out.
+  // Fall back to `outAmount` if missing (older API shapes).
+  const q = quoteResponse as any;
+  const minimumAmountOut = String(
+    q?.otherAmountThreshold ?? q?.outAmount ?? "0",
+  );
 
-  if (altAddresses.length > 0) {
-    const altResults = await Promise.all(
-      altAddresses.map(addr => connection.getAddressLookupTable(new PublicKey(addr)))
-    );
-    for (const result of altResults) {
-      if (result.value) {
-        addressLookupTableAccounts.push(result.value);
-      }
-    }
-  }
-
-  return { swapData, allMetas, addressLookupTableAccounts, setupInstructions, cleanupInstruction };
+  return { swapData, allMetas, minimumAmountOut, setupInstructions, cleanupInstruction };
 }
+

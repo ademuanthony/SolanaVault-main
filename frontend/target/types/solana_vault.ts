@@ -14,6 +14,56 @@ export type SolanaVault = {
   },
   "instructions": [
     {
+      "name": "acceptAdmin",
+      "docs": [
+        "Accept admin role (second step). Must be signed by the pending admin."
+      ],
+      "discriminator": [
+        112,
+        42,
+        45,
+        90,
+        116,
+        181,
+        13,
+        170
+      ],
+      "accounts": [
+        {
+          "name": "newAdmin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "globalConfig",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "adminRegisterUser",
       "docs": [
         "Admin register a user (admin only)"
@@ -109,7 +159,8 @@ export type SolanaVault = {
     {
       "name": "claimDlmmFees",
       "docs": [
-        "Claim trading fees from a DLMM position into the vault"
+        "Claim trading fees from a DLMM position. Pure CPI forwarder — TVL",
+        "must be reconciled afterwards via `update_tvl`."
       ],
       "discriminator": [
         102,
@@ -158,38 +209,10 @@ export type SolanaVault = {
           "writable": true
         },
         {
-          "name": "vaultState",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116,
-                  95,
-                  115,
-                  116,
-                  97,
-                  116,
-                  101
-                ]
-              }
-            ]
-          }
-        },
-        {
           "name": "dlmmProgram"
         }
       ],
       "args": [
-        {
-          "name": "claimedAmount",
-          "type": "u64"
-        },
         {
           "name": "cpiData",
           "type": {
@@ -384,6 +407,37 @@ export type SolanaVault = {
                   116,
                   101
                 ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vaultUsdcAccount",
+          "docs": [
+            "Vault USDC PDA — used to measure USDC recovered from the closed",
+            "position for logging (TVL still reconciles via `update_tvl`)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "globalConfig"
               }
             ]
           }
@@ -1256,6 +1310,10 @@ export type SolanaVault = {
         {
           "name": "swapAmount",
           "type": "u64"
+        },
+        {
+          "name": "minimumAmountOut",
+          "type": "u64"
         }
       ]
     },
@@ -1339,6 +1397,37 @@ export type SolanaVault = {
           }
         },
         {
+          "name": "vaultUsdcAccount",
+          "docs": [
+            "Vault USDC PDA — used to diff balance pre/post CPI and mark TVL",
+            "down by the amount of USDC deployed into the Meteora position."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "globalConfig"
+              }
+            ]
+          }
+        },
+        {
           "name": "dlmmProgram"
         },
         {
@@ -1361,6 +1450,64 @@ export type SolanaVault = {
             "defined": {
               "name": "dlmmCpiData"
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "proposeNewAdmin",
+      "docs": [
+        "Propose a new admin (first step of two-step rotation). `Some(pk)` sets",
+        "the pending admin; `None` cancels an in-flight proposal."
+      ],
+      "discriminator": [
+        232,
+        189,
+        155,
+        60,
+        4,
+        68,
+        17,
+        188
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "globalConfig",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "newAdmin",
+          "type": {
+            "option": "pubkey"
           }
         }
       ]
@@ -1624,84 +1771,6 @@ export type SolanaVault = {
       ]
     },
     {
-      "name": "simulateYield",
-      "docs": [
-        "Simulate yield (Temporary for Verification)"
-      ],
-      "discriminator": [
-        218,
-        87,
-        103,
-        223,
-        193,
-        51,
-        91,
-        98
-      ],
-      "accounts": [
-        {
-          "name": "admin",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "globalConfig",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  103,
-                  108,
-                  111,
-                  98,
-                  97,
-                  108,
-                  95,
-                  99,
-                  111,
-                  110,
-                  102,
-                  105,
-                  103
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "vaultState",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116,
-                  95,
-                  115,
-                  116,
-                  97,
-                  116,
-                  101
-                ]
-              }
-            ]
-          }
-        }
-      ],
-      "args": [
-        {
-          "name": "amount",
-          "type": "u64"
-        }
-      ]
-    },
-    {
       "name": "unflagUser",
       "docs": [
         "Unflag a user account (admin only)"
@@ -1861,7 +1930,8 @@ export type SolanaVault = {
     {
       "name": "updateVaultConfig",
       "docs": [
-        "Update global configuration (admin only)"
+        "Update global configuration (admin only). Admin rotation is NOT",
+        "included here — see `propose_new_admin` / `accept_admin`."
       ],
       "discriminator": [
         122,
@@ -2620,6 +2690,41 @@ export type SolanaVault = {
       "code": 6020,
       "name": "tvlDecreaseTooLarge",
       "msg": "TVL decrease exceeds maximum allowed per update (20%)"
+    },
+    {
+      "code": 6021,
+      "name": "tvlIncreaseTooLarge",
+      "msg": "TVL increase exceeds maximum allowed per update (50%)"
+    },
+    {
+      "code": 6022,
+      "name": "vaultPaused",
+      "msg": "Vault is paused"
+    },
+    {
+      "code": 6023,
+      "name": "noPendingAdmin",
+      "msg": "No pending admin to accept"
+    },
+    {
+      "code": 6024,
+      "name": "notPendingAdmin",
+      "msg": "Signer does not match the pending admin"
+    },
+    {
+      "code": 6025,
+      "name": "exceedsMaxTvl",
+      "msg": "Deposit would exceed global max TVL"
+    },
+    {
+      "code": 6026,
+      "name": "exceedsMaxUserShares",
+      "msg": "Deposit would exceed per-user share cap"
+    },
+    {
+      "code": 6027,
+      "name": "slippageExceeded",
+      "msg": "Slippage: output less than minimum_amount_out"
     }
   ],
   "types": [
@@ -2915,6 +3020,36 @@ export type SolanaVault = {
             "type": "u64"
           },
           {
+            "name": "paused",
+            "docs": [
+              "Emergency pause flag — gates deposit / withdraw / claim_referral_earnings."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "pendingAdmin",
+            "docs": [
+              "Two-step admin rotation: proposed next admin. Cleared on accept."
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "maxTvl",
+            "docs": [
+              "Soft cap on global TVL (0 = disabled). Deposit reverts if exceeded."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "maxUserShares",
+            "docs": [
+              "Soft cap on per-user shares (0 = disabled). Deposit reverts if exceeded."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -3088,12 +3223,6 @@ export type SolanaVault = {
         "kind": "struct",
         "fields": [
           {
-            "name": "admin",
-            "type": {
-              "option": "pubkey"
-            }
-          },
-          {
             "name": "tier1Threshold",
             "type": {
               "option": "u64"
@@ -3197,6 +3326,24 @@ export type SolanaVault = {
           },
           {
             "name": "welcomeBonusDev",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "paused",
+            "type": {
+              "option": "bool"
+            }
+          },
+          {
+            "name": "maxTvl",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "maxUserShares",
             "type": {
               "option": "u64"
             }
